@@ -100,7 +100,7 @@ Your app needs the AI keys to function.
 2. On the left menu, under the **Settings** section, click **Environment variables**.
 3. Under the **App settings** tab, click **+ Add** and add these two exact variables one by one:
    - Name: `HUGGINGFACE_API_KEY` | Value: *(Paste the Token from Step 2)*
-   - Name: `HUGGINGFACE_MODEL_URL` | Value: `https://api-inference.huggingface.co/models/nlpconnect/vit-gpt2-image-captioning`
+   - Name: `HUGGINGFACE_MODEL_URL` | Value: `https://api-inference.huggingface.co/models/microsoft/git-base-coco`
 4. Click **Apply** at the bottom, then click **Confirm** in the pop-up to restart the server.
 
 **IF you used Render (Option 3):**

@@ -53,7 +53,7 @@ class Captioner:
                 
             self.api_url = os.getenv(
                 "HUGGINGFACE_MODEL_URL", 
-                "https://api-inference.huggingface.co/models/nlpconnect/vit-gpt2-image-captioning"
+                "https://api-inference.huggingface.co/models/microsoft/git-base-coco"
             )
             print(f"Hugging Face API configured successfully. Target endpoint: {self.api_url}")
             
@@ -112,12 +112,17 @@ class Captioner:
                     data=img_bytes,
                     timeout=60
                 )
-                # response.raise_for_status()
-                result = response.json()
                 
-                if isinstance(result, dict) and "estimated_time" in result:
-                    wait_time = result["estimated_time"]
-                    print(f"Model is loading, waiting {wait_time} seconds...")
+                # If it's a 503 Service Unavailable, model is likely loading.
+                if response.status_code == 503:
+                    try:
+                        result = response.json()
+                        wait_time = result.get("estimated_time", 20.0)
+                        print(f"Model is loading (503), waiting {wait_time} seconds...")
+                    except ValueError:
+                        wait_time = 20.0
+                        print(f"Model is loading (503), waiting default {wait_time} seconds...")
+                        
                     time.sleep(wait_time)
                     response = requests.post(
                         self.api_url,
@@ -125,13 +130,29 @@ class Captioner:
                         data=img_bytes,
                         timeout=60
                     )
-                    result = response.json()
+                
+                # Check for other HTTP errors (Unauthorized, Bad Request, etc.)
+                response.raise_for_status()
 
-                if isinstance(result, list) and len(result) > 0 and "generated_text" in result[0]:
-                    caption = result[0]["generated_text"].strip()
-                else:
-                    caption = f"HF API unexpected response: {result}"
+                try:
+                    result = response.json()
+                except ValueError:
+                     # sometimes HF returns HTML for 500 errors
+                     print(f"Failed to parse JSON. Raw API response: {response.text}")
+                     caption = f"HF API Error (Non-JSON): {response.status_code}"
+                     result = None
+
+                if result:
+                    if isinstance(result, list) and len(result) > 0 and "generated_text" in result[0]:
+                        caption = result[0]["generated_text"].strip()
+                    elif isinstance(result, dict) and "error" in result:
+                        caption = f"Hugging Face API Error: {result['error']}"
+                    else:
+                        caption = f"HF API unexpected format: {result}"
                     
+            except requests.exceptions.HTTPError as http_err:
+                print(f"Hugging Face HTTP Error: {http_err} - Body: {response.text}")
+                caption = f"HTTP {response.status_code}: Error generating caption with Hugging Face API."
             except Exception as e:
                 print(f"Hugging Face API Request Error: {e}")
                 caption = "Error generating caption with Hugging Face API."
