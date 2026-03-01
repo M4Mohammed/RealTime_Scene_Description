@@ -31,7 +31,7 @@ from .classifier import DangerClassifier
 # For this skeleton, we will mock the captioner just to test the API structure,
 # and initialize the real one inside the actual benchmark/evaluation scripts later.
 # 
-from captioner import Captioner
+from .captioner import Captioner
 # Global initialized model - using huggingface-api for free inference without GPU
 caption_model = Captioner(model_name="huggingface-api")
 danger_classifier = DangerClassifier()
