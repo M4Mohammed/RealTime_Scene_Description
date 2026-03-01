@@ -22,6 +22,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const stopCameraBtn = document.getElementById('stop-camera-btn');
     const fpsCounter = document.getElementById('fps-counter');
 
+    // DOM Elements - Video Upload
+    const videoDropZone = document.getElementById('video-drop-zone');
+    const videoInput = document.getElementById('video-input');
+    const videoPreviewContainer = document.getElementById('video-preview-container');
+    const videoFileName = document.getElementById('video-file-name');
+    const videoFileSize = document.getElementById('video-file-size');
+    const removeVideoBtn = document.getElementById('remove-video-btn');
+    const analyzeVideoBtn = document.getElementById('analyze-video-btn');
+
     // DOM Elements - Results & States
     const loadingIndicator = document.getElementById('loading-indicator');
     const resultsContent = document.getElementById('results-content');
@@ -35,17 +44,34 @@ document.addEventListener('DOMContentLoaded', () => {
     const latencyVal = document.getElementById('latency-val');
     const statusIcon = document.getElementById('status-icon');
 
+    // DOM Elements - Slideshow Player (Video Analysis)
+    const slideshowContainer = document.getElementById('slideshow-container');
+    const slideshowFrame = document.getElementById('slideshow-frame');
+    const btnSlideshowPrev = document.getElementById('slideshow-prev');
+    const btnSlideshowNext = document.getElementById('slideshow-next');
+    const btnSlideshowPlayPause = document.getElementById('slideshow-play-pause');
+    const slideshowProgress = document.getElementById('slideshow-progress');
+    const loadingText = document.getElementById('loading-text');
+
     // DOM Elements - Toasts
     const toastContainer = document.getElementById('toast-container');
 
     // State Variables
     let selectedImageFile = null;
+    let selectedVideoFile = null;
     let cameraStream = null;
     let ws = null;
     let streamInterval = null;
     let frameCount = 0;
     let lastFpsTime = Date.now();
     const FRAME_RATE_MS = 1000; // 1 fps
+
+    // Slideshow State Variables
+    let videoResults = [];
+    let currentSlideIndex = 0;
+    let isPlayingSlideshow = false;
+    let slideshowInterval = null;
+    const SLIDESHOW_DELAY = 2500; // 2.5 seconds per frame
 
     // SVG Icons
     const ICONS = {
@@ -185,6 +211,92 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // ==========================================
+    // Video Upload & Analysis Logic
+    // ==========================================
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+        videoDropZone.addEventListener(eventName, preventDefaults, false);
+    });
+
+    ['dragenter', 'dragover'].forEach(eventName => {
+        videoDropZone.addEventListener(eventName, () => videoDropZone.classList.add('dragover'), false);
+    });
+
+    ['dragleave', 'drop'].forEach(eventName => {
+        videoDropZone.addEventListener(eventName, () => videoDropZone.classList.remove('dragover'), false);
+    });
+
+    videoDropZone.addEventListener('drop', (e) => {
+        const dt = e.dataTransfer;
+        const files = dt.files;
+        if (files.length) handleVideoSelect(files[0]);
+    });
+
+    videoInput.addEventListener('change', (e) => {
+        if (e.target.files.length) handleVideoSelect(e.target.files[0]);
+    });
+
+    function handleVideoSelect(file) {
+        if (!file.type.startsWith('video/')) {
+            showToast('Please select a valid video file (MP4, WebM, etc).', 'error');
+            return;
+        }
+
+        selectedVideoFile = file;
+
+        videoFileName.textContent = file.name;
+        videoFileSize.textContent = (file.size / (1024 * 1024)).toFixed(2) + ' MB';
+
+        videoPreviewContainer.classList.remove('preview-hidden');
+        videoDropZone.classList.add('hidden');
+        analyzeVideoBtn.disabled = false;
+
+        resetResults();
+    }
+
+    removeVideoBtn.addEventListener('click', () => {
+        selectedVideoFile = null;
+        videoInput.value = '';
+        videoPreviewContainer.classList.add('preview-hidden');
+        videoDropZone.classList.remove('hidden');
+        resetResults();
+    });
+
+    analyzeVideoBtn.addEventListener('click', async () => {
+        if (!selectedVideoFile) return;
+
+        showLoading("Extracting keyframes and analyzing video. This may take a minute...");
+        analyzeVideoBtn.disabled = true;
+
+        const formData = new FormData();
+        formData.append('file', selectedVideoFile);
+
+        try {
+            const response = await fetch(`${API_BASE_URL}/api/analyze/video`, {
+                method: 'POST',
+                body: formData
+            });
+
+            if (!response.ok) throw new Error(`Server responded with ${response.status}`);
+
+            const data = await response.json();
+
+            if (data.frames && data.frames.length > 0) {
+                videoResults = data.frames;
+                initSlideshow();
+            } else {
+                showToast("No distinct frames found or video processing failed.", "error");
+                resetResults();
+            }
+        } catch (error) {
+            console.error('Error analyzing video:', error);
+            showToast('Failed to analyze the video. Ensure the backend supports video.', 'error');
+            resetResults();
+        } finally {
+            analyzeVideoBtn.disabled = false;
+        }
+    });
+
+    // ==========================================
     // Live Camera Logic (WebSockets)
     // ==========================================
     startCameraBtn.addEventListener('click', async () => {
@@ -221,7 +333,6 @@ document.addEventListener('DOMContentLoaded', () => {
         startCameraBtn.classList.remove('hidden');
         stopCameraBtn.classList.add('hidden');
         fpsCounter.textContent = '0 FPS';
-        resetResults();
     }
 
     function connectWebSocket() {
@@ -284,39 +395,42 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // ==========================================
-    // UI Helpers
+    // UI Helpers & Slideshow
     // ==========================================
-    function showLoading() {
+    function showLoading(msg = 'Analyzing scene...') {
+        loadingText.textContent = msg;
         emptyState.classList.add('hidden');
         resultsContent.classList.add('hidden');
+        slideshowContainer.classList.add('hidden');
         loadingIndicator.classList.remove('hidden');
+        stopSlideshow();
     }
 
     function resetResults() {
         emptyState.classList.remove('hidden');
         resultsContent.classList.add('hidden');
+        slideshowContainer.classList.add('hidden');
         loadingIndicator.classList.add('hidden');
         statusBanner.className = 'status-banner';
-        statusIcon.innerHTML = ICONS.info; // Default icon
+        statusIcon.innerHTML = ICONS.info;
         classificationResult.textContent = 'N/A';
         dangerReason.textContent = 'Awaiting analysis...';
         captionText.textContent = 'No caption available.';
         latencyVal.textContent = '0 ms';
+        stopSlideshow();
+        videoResults = [];
     }
 
     function displayResults(data) {
         loadingIndicator.classList.add('hidden');
         emptyState.classList.add('hidden');
         resultsContent.classList.remove('hidden');
-        analyzeBtn.disabled = false;
 
-        // Populate text
         captionText.textContent = data.caption || 'No caption returned.';
 
         const isSafe = data.classification && data.classification.toUpperCase() === 'SAFE';
         classificationResult.textContent = (data.classification || 'UNKNOWN').toUpperCase();
 
-        // Update styling and icons based on classification
         if (isSafe) {
             statusBanner.className = 'status-banner safe';
             dangerReason.textContent = "Scene appears clear of common hazards.";
@@ -327,9 +441,79 @@ document.addEventListener('DOMContentLoaded', () => {
             statusIcon.innerHTML = ICONS.danger;
         }
 
-        // Populate metrics
         if (data.latency_ms) {
             latencyVal.textContent = `${data.latency_ms.toFixed(0)} ms`;
         }
     }
+
+    // --- Slideshow Logic ---
+    function initSlideshow() {
+        if (videoResults.length === 0) return;
+
+        currentSlideIndex = 0;
+        slideshowContainer.classList.remove('hidden');
+        loadingIndicator.classList.add('hidden');
+
+        updateSlideshowUI();
+        startSlideshow();
+    }
+
+    function updateSlideshowUI() {
+        const frameData = videoResults[currentSlideIndex];
+
+        if (frameData.image_base64) {
+            slideshowFrame.src = 'data:image/jpeg;base64,' + frameData.image_base64;
+        }
+
+        slideshowProgress.textContent = `${currentSlideIndex + 1} / ${videoResults.length}`;
+
+        displayResults({
+            caption: frameData.caption,
+            classification: frameData.classification,
+            danger_reason: frameData.danger_reason,
+            latency_ms: frameData.latency_ms
+        });
+    }
+
+    function nextSlide() {
+        currentSlideIndex = (currentSlideIndex + 1) % videoResults.length;
+        updateSlideshowUI();
+    }
+
+    function prevSlide() {
+        currentSlideIndex = (currentSlideIndex - 1 + videoResults.length) % videoResults.length;
+        updateSlideshowUI();
+    }
+
+    function startSlideshow() {
+        isPlayingSlideshow = true;
+        btnSlideshowPlayPause.textContent = "Pause";
+        if (slideshowInterval) clearInterval(slideshowInterval);
+        slideshowInterval = setInterval(nextSlide, SLIDESHOW_DELAY);
+    }
+
+    function stopSlideshow() {
+        isPlayingSlideshow = false;
+        btnSlideshowPlayPause.textContent = "Play";
+        if (slideshowInterval) clearInterval(slideshowInterval);
+    }
+
+    btnSlideshowNext.addEventListener('click', () => {
+        stopSlideshow();
+        nextSlide();
+    });
+
+    btnSlideshowPrev.addEventListener('click', () => {
+        stopSlideshow();
+        prevSlide();
+    });
+
+    btnSlideshowPlayPause.addEventListener('click', () => {
+        if (isPlayingSlideshow) {
+            stopSlideshow();
+        } else {
+            startSlideshow();
+        }
+    });
+
 });

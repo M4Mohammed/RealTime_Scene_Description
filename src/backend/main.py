@@ -7,6 +7,9 @@ from PIL import Image
 import json
 import logging
 import os
+import cv2
+import tempfile
+import numpy as np
 
 # Set up simple logging
 logging.basicConfig(level=logging.INFO)
@@ -77,6 +80,124 @@ async def analyze_image(file: UploadFile = File(...)):
     except Exception as e:
         logger.error(f"Error processing image: {str(e)}")
         return {"error": str(e)}, 500
+
+def mse(imageA, imageB):
+    # the 'Mean Squared Error' between the two images is the
+    # sum of the squared difference between the two images;
+    err = np.sum((imageA.astype("float") - imageB.astype("float")) ** 2)
+    err /= float(imageA.shape[0] * imageA.shape[1])
+    return err
+
+@app.post("/api/analyze/video")
+async def analyze_video(file: UploadFile = File(...)):
+    """
+    Analyzes an uploaded video file.
+    Extracts frames, removes redundant frames, and captions the unique ones.
+    """
+    temp_video_path = None
+    try:
+        logger.info(f"Received video: {file.filename}")
+        
+        # Save uploaded video to a temporary file
+        fd, temp_video_path = tempfile.mkstemp(suffix=".mp4")
+        with os.fdopen(fd, 'wb') as f:
+            f.write(await file.read())
+
+        cap = cv2.VideoCapture(temp_video_path)
+        fps = cap.get(cv2.CAP_PROP_FPS)
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        
+        if fps == 0 or total_frames == 0:
+            raise Exception("Could not read video properties.")
+
+        frames_data = []
+        prev_frame_gray = None
+        
+        # Extract at most 1 frame per second to avoid overload
+        frame_interval = int(fps) 
+        if frame_interval <= 0: frame_interval = 1
+        
+        current_frame = 0
+        
+        while cap.isOpened():
+            ret, frame = cap.read()
+            if not ret:
+                break
+                
+            if current_frame % frame_interval == 0:
+                # Resize for faster processing and lower bandwidth
+                frame_resized = cv2.resize(frame, (640, 480))
+                gray = cv2.cvtColor(frame_resized, cv2.COLOR_BGR2GRAY)
+                
+                is_unique = True
+                
+                if prev_frame_gray is not None:
+                    # Calculate Mean Squared Error
+                    error = mse(gray, prev_frame_gray)
+                    logger.info(f"Frame {current_frame} MSE: {error}")
+                    # If MSE is low, the frames are very similar (redundant)
+                    if error < 1000.0:  # Threshold can be tuned
+                        is_unique = False
+                
+                if is_unique:
+                    # Convert to PIL Image for Captioner
+                    color_frame = cv2.cvtColor(frame_resized, cv2.COLOR_BGR2RGB)
+                    pil_img = Image.fromarray(color_frame)
+                    
+                    # Generate Caption
+                    # Try using real pipeline, fallback to mock if it fails 
+                    try:
+                        caption_result = caption_model.generate_caption(pil_img)
+                    except Exception as e:
+                        logger.warning(f"Caption engine failed, using mock: {e}")
+                        caption_result = {
+                            "caption": f"MOCK: Video frame {current_frame} extracted.",
+                            "latency_ms": 100.0
+                        }
+                        
+                    caption = caption_result["caption"]
+                    classification, reason = danger_classifier.classify(caption)
+                    
+                    # Convert PIL back to base64 for frontend
+                    buffered = BytesIO()
+                    pil_img.save(buffered, format="JPEG", quality=75)
+                    img_str = base64.b64encode(buffered.getvalue()).decode()
+                    
+                    frames_data.append({
+                        "frame_index": current_frame,
+                        "time_sec": current_frame / fps,
+                        "caption": caption,
+                        "classification": classification,
+                        "danger_reason": reason,
+                        "latency_ms": caption_result.get("latency_ms", 0),
+                        "image_base64": img_str
+                    })
+                    
+                    prev_frame_gray = gray
+                    
+                    # Limit max frames to prevent huge payloads/timeouts
+                    if len(frames_data) >= 20: 
+                        logger.info("Reached maximum of 20 unique frames.")
+                        break
+            
+            current_frame += 1
+
+        cap.release()
+        
+        if not frames_data:
+             raise Exception("No valid frames could be extracted.")
+
+        logger.info(f"Processed video. Extracted {len(frames_data)} unique frames.")
+        return {"frames": frames_data}
+
+    except Exception as e:
+        logger.error(f"Error processing video: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return {"error": str(e)}, 500
+    finally:
+        if temp_video_path and os.path.exists(temp_video_path):
+            os.remove(temp_video_path)
 
 
 @app.websocket("/ws/livestream")
