@@ -5,3 +5,4 @@ python-multipart
 websockets
 requests
 opencv-python-headless
+huggingface_hub

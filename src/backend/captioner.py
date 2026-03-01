@@ -52,18 +52,23 @@ class Captioner:
             
         elif self.model_name.lower() == "huggingface-api":
             import os
-            import requests
+            from huggingface_hub import InferenceClient
             
-            print("Configuring Hugging Face API...")
+            print("Configuring Hugging Face API via huggingface_hub...")
             self.api_key = os.getenv("HUGGINGFACE_API_KEY")
             if not self.api_key:
                 print("WARNING: HUGGINGFACE_API_KEY environment variable not set.")
                 
-            self.api_url = os.getenv(
+            model_id = os.getenv(
                 "HUGGINGFACE_MODEL_URL", 
-                "https://api-inference.huggingface.co/models/microsoft/git-base-coco"
+                "Salesforce/blip-image-captioning-base"
             )
-            print(f"Hugging Face API configured successfully. Target endpoint: {self.api_url}")
+            # Support if full API URL was provided by mistake
+            if model_id.startswith("http"):
+                model_id = model_id.split("models/")[-1]
+
+            print(f"Hugging Face API configured successfully. Target model: {model_id}")
+            self.client = InferenceClient(model=model_id, token=self.api_key)
             
         else:
             raise NotImplementedError(f"Model loader for {self.model_name} is not implemented yet.")
@@ -100,7 +105,6 @@ class Captioner:
             
         elif self.model_name.lower() == "huggingface-api":
             import io
-            import requests
             
             start_time = time.perf_counter()
             
@@ -111,57 +115,9 @@ class Captioner:
             image.save(buffered, format="JPEG")
             img_bytes = buffered.getvalue()
             
-            headers = {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
-            
             try:
-                # By default, image captioning models on HF take raw binary image data
-                response = requests.post(
-                    self.api_url,
-                    headers=headers,
-                    data=img_bytes,
-                    timeout=60
-                )
-                
-                # If it's a 503 Service Unavailable, model is likely loading.
-                if response.status_code == 503:
-                    try:
-                        result = response.json()
-                        wait_time = result.get("estimated_time", 20.0)
-                        print(f"Model is loading (503), waiting {wait_time} seconds...")
-                    except ValueError:
-                        wait_time = 20.0
-                        print(f"Model is loading (503), waiting default {wait_time} seconds...")
-                        
-                    time.sleep(wait_time)
-                    response = requests.post(
-                        self.api_url,
-                        headers=headers,
-                        data=img_bytes,
-                        timeout=60
-                    )
-                
-                # Check for other HTTP errors (Unauthorized, Bad Request, etc.)
-                response.raise_for_status()
-
-                try:
-                    result = response.json()
-                except ValueError:
-                     # sometimes HF returns HTML for 500 errors
-                     print(f"Failed to parse JSON. Raw API response: {response.text}")
-                     caption = f"HF API Error (Non-JSON): {response.status_code}"
-                     result = None
-
-                if result:
-                    if isinstance(result, list) and len(result) > 0 and "generated_text" in result[0]:
-                        caption = result[0]["generated_text"].strip()
-                    elif isinstance(result, dict) and "error" in result:
-                        caption = f"Hugging Face API Error: {result['error']}"
-                    else:
-                        caption = f"HF API unexpected format: {result}"
-                    
-            except requests.exceptions.HTTPError as http_err:
-                print(f"Hugging Face HTTP Error: {http_err} - Body: {response.text}")
-                caption = f"HTTP {response.status_code}: Error generating caption with Hugging Face API."
+                # InferenceClient automatically handles timeouts, retries, and formatting.
+                caption = self.client.image_to_text(img_bytes)
             except Exception as e:
                 print(f"Hugging Face API Request Error: {e}")
                 caption = "Error generating caption with Hugging Face API."
