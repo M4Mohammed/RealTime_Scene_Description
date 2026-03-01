@@ -43,7 +43,7 @@ danger_classifier = DangerClassifier()
 
 # Mount the frontend directory to serve static files
 frontend_dir = os.path.join(os.path.dirname(__file__), "..", "frontend")
-app.mount("/frontend", StaticFiles(directory=frontend_dir, html=True), name="frontend")
+app.mount("/", StaticFiles(directory=frontend_dir, html=True), name="frontend")
 
 
 @app.post("/api/analyze/image")
