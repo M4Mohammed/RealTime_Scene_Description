@@ -1,29 +1,65 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>VisionAssist | Scene Description & Danger Detection</title>
     <link rel="stylesheet" href="style.css">
     <!-- Google Fonts for modern typography -->
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap"
+        rel="stylesheet">
 </head>
+
 <body class="dark-theme">
+    <!-- Dynamic Background Elements -->
+    <div class="bg-shape shape-1"></div>
+    <div class="bg-shape shape-2"></div>
+    <div class="bg-shape shape-3"></div>
+
+    <!-- Toast Notification Container -->
+    <div id="toast-container" class="toast-container"></div>
+
     <div class="app-container">
         <header class="header">
             <div class="logo">
-                <span class="logo-icon">👁️</span>
+                <div class="logo-icon-wrapper">
+                    <!-- Heroicon: eye -->
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2"
+                        stroke="currentColor" class="logo-icon">
+                        <path stroke-linecap="round" stroke-linejoin="round"
+                            d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+                    </svg>
+                </div>
                 <h1>VisionAssist</h1>
             </div>
-            <p class="subtitle">Real-Time Scene Description & Danger Detection</p>
+            <p class="subtitle">AI-Powered Scene Description & Danger Detection</p>
         </header>
 
         <main class="main-content">
             <div class="controls-panel glass-panel">
-                <h2>Input Source</h2>
+                <div class="panel-header">
+                    <h2>Input Source</h2>
+                    <div class="dot-indicator"></div>
+                </div>
                 <div class="tabs">
-                    <button class="tab-btn active" data-target="image-tab">🖼️ Upload Image</button>
-                    <button class="tab-btn" data-target="camera-tab">🎥 Live Camera</button>
+                    <button class="tab-btn active" data-target="image-tab">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+                            stroke="currentColor" class="tab-icon">
+                            <path stroke-linecap="round" stroke-linejoin="round"
+                                d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 0 0 1.5-1.5V6a1.5 1.5 0 0 0-1.5-1.5H3.75A1.5 1.5 0 0 0 2.25 6v12a1.5 1.5 0 0 0 1.5 1.5Zm10.5-11.25h.008v.008h-.008V8.25Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
+                        </svg>
+                        Upload Image
+                    </button>
+                    <button class="tab-btn" data-target="camera-tab">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+                            stroke="currentColor" class="tab-icon">
+                            <path stroke-linecap="round"
+                                d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z" />
+                        </svg>
+                        Live Camera
+                    </button>
                 </div>
 
                 <!-- Image Upload Section -->
@@ -31,65 +67,155 @@
                     <div class="upload-area" id="drop-zone">
                         <input type="file" id="file-input" accept="image/*" hidden>
                         <div class="upload-content">
-                            <span class="upload-icon">⬆️</span>
-                            <p>Drag & Drop an image here or</p>
-                            <button class="btn secondary" onclick="document.getElementById('file-input').click()">Browse Files</button>
+                            <div class="upload-icon-wrapper pulse-soft">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                                    stroke-width="1.5" stroke="currentColor" class="upload-icon">
+                                    <path stroke-linecap="round" stroke-linejoin="round"
+                                        d="M12 16.5V9.75m0 0l3 3m-3-3l-3 3M6.75 19.5a4.5 4.5 0 01-1.41-8.775 5.25 5.25 0 0110.233-2.33 3 3 0 013.758 3.848A3.742 3.742 0 0115 19.5H6.75z" />
+                                </svg>
+                            </div>
+                            <p class="upload-text">Drag & Drop an image here or</p>
+                            <button class="btn btn-outline"
+                                onclick="document.getElementById('file-input').click()">Browse Files</button>
                         </div>
                     </div>
-                    <img id="image-preview" class="preview-hidden" alt="Uploaded Preview">
-                    <button id="analyze-btn" class="btn primary" disabled>Analyze Image</button>
+
+                    <div id="preview-container" class="preview-hidden">
+                        <div class="image-preview-wrapper">
+                            <img id="image-preview" alt="Uploaded Preview">
+                            <div class="preview-overlay">
+                                <button id="remove-image-btn" class="btn-icon" aria-label="Remove image">
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                                        stroke-width="2" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                        <button id="analyze-btn" class="btn btn-glow btn-primary w-full mt-4">
+                            <span>Analyze Image</span>
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2"
+                                stroke="currentColor" class="btn-icon-right">
+                                <path stroke-linecap="round" stroke-linejoin="round"
+                                    d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3" />
+                            </svg>
+                        </button>
+                    </div>
                 </div>
 
                 <!-- Live Camera Section -->
                 <div id="camera-tab" class="tab-content hidden">
-                    <div class="video-container">
+                    <div class="video-container glass-inset">
                         <video id="camera-stream" autoplay playsinline muted></video>
                         <canvas id="camera-canvas" hidden></canvas>
-                        <div class="camera-overlay">
-                            <span class="recording-dot pulse"></span>
-                            <span id="fps-counter">0 FPS</span>
+
+                        <div class="camera-overlay top-right">
+                            <span class="recording-indicator">
+                                <span class="recording-dot pulse"></span>
+                                <span id="fps-counter">0 FPS</span>
+                            </span>
+                        </div>
+
+                        <div id="camera-placeholder" class="camera-placeholder">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+                                stroke="currentColor" class="placeholder-icon">
+                                <path stroke-linecap="round" stroke-linejoin="round"
+                                    d="m15.75 10.5 4.72-4.72a.75.75 0 0 1 1.28.53v11.38a.75.75 0 0 1-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25h-9A2.25 2.25 0 0 0 2.25 7.5v9a2.25 2.25 0 0 0 2.25 2.25Z" />
+                            </svg>
+                            <p>Camera is off</p>
                         </div>
                     </div>
+
                     <div class="camera-controls">
-                        <button id="start-camera-btn" class="btn primary">Start Camera</button>
-                        <button id="stop-camera-btn" class="btn danger hidden">Stop Camera</button>
+                        <button id="start-camera-btn" class="btn btn-glow btn-primary w-full">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2"
+                                stroke="currentColor" class="btn-icon-left">
+                                <path stroke-linecap="round" stroke-linejoin="round"
+                                    d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347c-.75.412-1.667-.13-1.667-.986V5.653Z" />
+                            </svg>
+                            Start Camera
+                        </button>
+                        <button id="stop-camera-btn" class="btn btn-danger w-full hidden">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2"
+                                stroke="currentColor" class="btn-icon-left">
+                                <path stroke-linecap="round" stroke-linejoin="round"
+                                    d="M5.25 7.5A2.25 2.25 0 0 1 7.5 5.25h9a2.25 2.25 0 0 1 2.25 2.25v9a2.25 2.25 0 0 1-2.25 2.25h-9a2.25 2.25 0 0 1-2.25-2.25v-9Z" />
+                            </svg>
+                            Stop Camera
+                        </button>
                     </div>
                 </div>
             </div>
 
             <!-- Results Panel -->
             <div class="results-panel glass-panel">
-                <h2>Analysis Results</h2>
-                
+                <div class="panel-header">
+                    <h2>Analysis Results</h2>
+                    <div class="dot-indicator"></div>
+                </div>
+
                 <div id="loading-indicator" class="hidden">
-                    <div class="spinner"></div>
-                    <p>Analyzing scene...</p>
+                    <div class="modern-spinner">
+                        <div class="double-bounce1"></div>
+                        <div class="double-bounce2"></div>
+                    </div>
+                    <p class="loading-text animate-pulse">Analyzing scene...</p>
                 </div>
 
                 <div id="results-content" class="results-content hidden">
                     <div class="status-banner" id="status-banner">
-                        <h3 id="classification-result">SAFE</h3>
-                        <p id="danger-reason" class="reason-text"></p>
+                        <div class="status-icon-wrapper" id="status-icon">
+                            <!-- Icon injected by JS -->
+                        </div>
+                        <div class="status-info">
+                            <h3 id="classification-result">SAFE</h3>
+                            <p id="danger-reason" class="reason-text"></p>
+                        </div>
                     </div>
 
-                    <div class="result-card">
-                        <h4>Generated Caption</h4>
-                        <p id="caption-text" class="caption-text">No caption generated yet.</p>
+                    <div class="result-card glass-card">
+                        <div class="card-header">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+                                stroke="currentColor" class="card-icon">
+                                <path stroke-linecap="round" stroke-linejoin="round"
+                                    d="M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v2.25a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6ZM3.75 15.75A2.25 2.25 0 0 1 6 13.5h2.25a2.25 2.25 0 0 1 2.25 2.25V18a2.25 2.25 0 0 1-2.25 2.25H6A2.25 2.25 0 0 1 3.75 18v-2.25ZM13.5 6a2.25 2.25 0 0 1 2.25-2.25H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 10.5h-2.25a2.25 2.25 0 0 1-2.25-2.25V6ZM13.5 15.75a2.25 2.25 0 0 1 2.25-2.25H18a2.25 2.25 0 0 1 2.25 2.25V18A2.25 2.25 0 0 1 18 20.25h-2.25A2.25 2.25 0 0 1 13.5 18v-2.25Z" />
+                            </svg>
+                            <h4>Generated Caption</h4>
+                        </div>
+                        <div class="caption-container">
+                            <p id="caption-text" class="caption-text">No caption generated yet.</p>
+                        </div>
                     </div>
 
-                    <div class="metrics-card">
-                        <h4>Performance Metrics</h4>
+                    <div class="metrics-card glass-card">
+                        <div class="card-header">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+                                stroke="currentColor" class="card-icon">
+                                <path stroke-linecap="round" stroke-linejoin="round"
+                                    d="M11.42 15.17 17.25 21A2.652 2.652 0 0 0 21 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 1 1-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 0 0 4.486-6.336l-3.276 3.277a3.004 3.004 0 0 1-2.25-2.298l-1.414-1.414a3.004 3.004 0 0 1-.502-3.153l3.278-3.277a4.5 4.5 0 0 0-6.336 4.486c.091 1.076-.071 2.264-.904 2.95l-.102.085m-1.745 1.437L5.909 7.5H4.5L2.25 3.75l1.5-1.5L7.5 4.5v1.409l4.26 4.26m-1.745 1.437 1.745-1.437m6.615 8.206L15.75 15.75M4.867 19.125h.008v.008h-.008v-.008Z" />
+                            </svg>
+                            <h4>Performance Metrics</h4>
+                        </div>
                         <div class="metrics-grid">
                             <div class="metric">
                                 <span class="metric-label">Caption Latency</span>
-                                <span class="metric-value" id="latency-val">-- ms</span>
+                                <div class="metric-value-wrapper">
+                                    <span class="metric-value" id="latency-val">-- ms</span>
+                                </div>
                             </div>
                         </div>
                     </div>
                 </div>
-                
+
                 <div id="empty-state" class="empty-state">
-                    <p>Upload an image or start the camera to see results.</p>
+                    <div class="empty-state-icon">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1"
+                            stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round"
+                                d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
+                        </svg>
+                    </div>
+                    <p>Awaiting input. Upload an image or start the camera to analyze the scene.</p>
                 </div>
             </div>
         </main>
@@ -97,4 +223,5 @@
 
     <script src="app.js"></script>
 </body>
+
 </html>

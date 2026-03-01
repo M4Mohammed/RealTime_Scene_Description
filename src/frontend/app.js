@@ -1,34 +1,42 @@
 document.addEventListener('DOMContentLoaded', () => {
     // API Configuration
-    const API_BASE_URL = 'http://localhost:8000';
-    const WS_URL = 'ws://localhost:8000/ws/livestream';
+    const API_BASE_URL = 'https://vision-assist-buf7dva9gndrase5.swedencentral-01.azurewebsites.net';
+    const WS_URL = 'wss://vision-assist-buf7dva9gndrase5.swedencentral-01.azurewebsites.net/ws/livestream';
 
-    // DOM Elements
+    // DOM Elements - Navigation
     const tabs = document.querySelectorAll('.tab-btn');
     const tabContents = document.querySelectorAll('.tab-content');
-    
-    // Image Upload Elements
+
+    // DOM Elements - Image Upload
     const dropZone = document.getElementById('drop-zone');
     const fileInput = document.getElementById('file-input');
     const imagePreview = document.getElementById('image-preview');
+    const previewContainer = document.getElementById('preview-container');
+    const removeImageBtn = document.getElementById('remove-image-btn');
     const analyzeBtn = document.getElementById('analyze-btn');
-    
-    // Camera Elements
+
+    // DOM Elements - Camera
     const video = document.getElementById('camera-stream');
     const canvas = document.getElementById('camera-canvas');
     const startCameraBtn = document.getElementById('start-camera-btn');
     const stopCameraBtn = document.getElementById('stop-camera-btn');
     const fpsCounter = document.getElementById('fps-counter');
-    
-    // Results Elements
+
+    // DOM Elements - Results & States
     const loadingIndicator = document.getElementById('loading-indicator');
     const resultsContent = document.getElementById('results-content');
     const emptyState = document.getElementById('empty-state');
+
+    // DOM Elements - Specific Results Data
     const statusBanner = document.getElementById('status-banner');
     const classificationResult = document.getElementById('classification-result');
     const dangerReason = document.getElementById('danger-reason');
     const captionText = document.getElementById('caption-text');
     const latencyVal = document.getElementById('latency-val');
+    const statusIcon = document.getElementById('status-icon');
+
+    // DOM Elements - Toasts
+    const toastContainer = document.getElementById('toast-container');
 
     // State Variables
     let selectedImageFile = null;
@@ -37,26 +45,53 @@ document.addEventListener('DOMContentLoaded', () => {
     let streamInterval = null;
     let frameCount = 0;
     let lastFpsTime = Date.now();
-    const FRAME_RATE_MS = 1000; // Send a frame every 1 second (1000ms) to avoid overloading
+    const FRAME_RATE_MS = 1000; // 1 fps
+
+    // SVG Icons
+    const ICONS = {
+        safe: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg>`,
+        danger: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3Z" /></svg>`,
+        error: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3Z" /></svg>`,
+        info: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m11.25 11.25.041-.02a.75.75 0 0 1 1.063.852l-.708 2.836a.75.75 0 0 0 1.063.853l.041-.021M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9-3.75h.008v.008H12V8.25Z" /></svg>`
+    };
+
+    // ==========================================
+    // Friendly Toast Notifications
+    // ==========================================
+    function showToast(message, type = 'info') {
+        const toast = document.createElement('div');
+        toast.className = `toast ${type}`;
+
+        const icon = type === 'error' ? ICONS.error : ICONS.info;
+
+        toast.innerHTML = `
+            <div class="toast-icon">${icon}</div>
+            <div class="toast-message">${message}</div>
+        `;
+
+        toastContainer.appendChild(toast);
+
+        // Remove toast after duration
+        setTimeout(() => {
+            toast.classList.add('fade-out');
+            setTimeout(() => toast.remove(), 300); // Wait for fade-out animation
+        }, 4000);
+    }
 
     // ==========================================
     // Tab Switching Logic
     // ==========================================
     tabs.forEach(tab => {
         tab.addEventListener('click', () => {
-            // Remove active class from all
             tabs.forEach(t => t.classList.remove('active'));
             tabContents.forEach(c => c.classList.add('hidden'));
-            
-            // Add active class to clicked tab
+
             tab.classList.add('active');
             const targetId = tab.getAttribute('data-target');
             document.getElementById(targetId).classList.remove('hidden');
 
-            // Reset UI state when switching tabs
             resetResults();
 
-            // Stop camera if switching away from camera tab
             if (targetId !== 'camera-tab' && cameraStream) {
                 stopCamera();
             }
@@ -66,50 +101,61 @@ document.addEventListener('DOMContentLoaded', () => {
     // ==========================================
     // Image Upload Logic
     // ==========================================
-    dropZone.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        dropZone.classList.add('dragover');
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+        dropZone.addEventListener(eventName, preventDefaults, false);
     });
 
-    dropZone.addEventListener('dragleave', () => {
-        dropZone.classList.remove('dragover');
+    function preventDefaults(e) {
+        e.preventDefault();
+        e.stopPropagation();
+    }
+
+    ['dragenter', 'dragover'].forEach(eventName => {
+        dropZone.addEventListener(eventName, () => dropZone.classList.add('dragover'), false);
+    });
+
+    ['dragleave', 'drop'].forEach(eventName => {
+        dropZone.addEventListener(eventName, () => dropZone.classList.remove('dragover'), false);
     });
 
     dropZone.addEventListener('drop', (e) => {
-        e.preventDefault();
-        dropZone.classList.remove('dragover');
-        
-        if (e.dataTransfer.files.length) {
-            handleFileSelect(e.dataTransfer.files[0]);
-        }
+        const dt = e.dataTransfer;
+        const files = dt.files;
+        if (files.length) handleFileSelect(files[0]);
     });
 
     fileInput.addEventListener('change', (e) => {
-        if (e.target.files.length) {
-            handleFileSelect(e.target.files[0]);
-        }
+        if (e.target.files.length) handleFileSelect(e.target.files[0]);
     });
 
     function handleFileSelect(file) {
         if (!file.type.startsWith('image/')) {
-            alert('Please select a valid image file.');
+            showToast('Please select a valid image file (JPEG, PNG, etc).', 'error');
             return;
         }
 
         selectedImageFile = file;
-        
-        // Setup Preview
+
         const reader = new FileReader();
         reader.onload = (e) => {
             imagePreview.src = e.target.result;
-            imagePreview.classList.remove('preview-hidden');
-            dropZone.style.display = 'none';
+            previewContainer.classList.remove('preview-hidden');
+            dropZone.classList.add('hidden');
             analyzeBtn.disabled = false;
         };
         reader.readAsDataURL(file);
-        
+
         resetResults();
     }
+
+    removeImageBtn.addEventListener('click', () => {
+        selectedImageFile = null;
+        fileInput.value = ''; // Clear input
+        imagePreview.src = '';
+        previewContainer.classList.add('preview-hidden');
+        dropZone.classList.remove('hidden');
+        resetResults();
+    });
 
     analyzeBtn.addEventListener('click', async () => {
         if (!selectedImageFile) return;
@@ -126,13 +172,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 body: formData
             });
 
-            if (!response.ok) throw new Error('Network response was not ok');
-            
+            if (!response.ok) throw new Error(`Server responded with ${response.status}`);
+
             const data = await response.json();
             displayResults(data);
         } catch (error) {
             console.error('Error analyzing image:', error);
-            alert('Failed to analyze the image. Is the backend running?');
+            showToast('Failed to analyze the image. Ensure the backend server is running.', 'error');
             resetResults();
             analyzeBtn.disabled = false;
         }
@@ -143,21 +189,20 @@ document.addEventListener('DOMContentLoaded', () => {
     // ==========================================
     startCameraBtn.addEventListener('click', async () => {
         try {
-            cameraStream = await navigator.mediaDevices.getUserMedia({ 
-                video: { facingMode: "environment" }, 
-                audio: false 
+            cameraStream = await navigator.mediaDevices.getUserMedia({
+                video: { facingMode: "environment", width: { ideal: 640 }, height: { ideal: 480 } },
+                audio: false
             });
             video.srcObject = cameraStream;
-            
+
             startCameraBtn.classList.add('hidden');
             stopCameraBtn.classList.remove('hidden');
             resetResults();
-            
-            // Connect to WebSocket
+
             connectWebSocket();
         } catch (err) {
             console.error("Error accessing camera: ", err);
-            alert("Could not access camera. Please endure permissions are granted.");
+            showToast("Camera access denied or unavailable. Please check permissions.", "error");
         }
     });
 
@@ -169,15 +214,10 @@ document.addEventListener('DOMContentLoaded', () => {
             cameraStream = null;
         }
         video.srcObject = null;
-        
-        if (ws) {
-            ws.close();
-        }
-        
-        if (streamInterval) {
-            clearInterval(streamInterval);
-        }
-        
+
+        if (ws) ws.close();
+        if (streamInterval) clearInterval(streamInterval);
+
         startCameraBtn.classList.remove('hidden');
         stopCameraBtn.classList.add('hidden');
         fpsCounter.textContent = '0 FPS';
@@ -186,23 +226,33 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function connectWebSocket() {
         ws = new WebSocket(WS_URL);
-        
+
         ws.onopen = () => {
             console.log('WebSocket Connected');
-            // Start capturing frames
             streamInterval = setInterval(sendFrame, FRAME_RATE_MS);
+            showToast('Live camera analysis started.');
         };
-        
+
         ws.onmessage = (event) => {
-            const data = JSON.parse(event.data);
-            if(data.error) {
-                console.error("WS Error:", data.error);
-                return;
+            try {
+                const data = JSON.parse(event.data);
+                if (data.error) {
+                    console.error("WS Server Error:", data.error);
+                    return;
+                }
+                displayResults(data);
+                updateFPS();
+            } catch (e) {
+                console.error("Failed to parse WS message", e);
             }
-            displayResults(data);
-            updateFPS();
         };
-        
+
+        ws.onerror = (error) => {
+            console.error("WebSocket Error:", error);
+            showToast('Connection error. Is the backend running?', 'error');
+            stopCamera();
+        }
+
         ws.onclose = () => {
             console.log('WebSocket Disconnected');
             if (streamInterval) clearInterval(streamInterval);
@@ -212,16 +262,14 @@ document.addEventListener('DOMContentLoaded', () => {
     function sendFrame() {
         if (!ws || ws.readyState !== WebSocket.OPEN || !cameraStream) return;
 
-        // Draw current video frame to canvas
         const ctx = canvas.getContext('2d');
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
+        canvas.width = video.videoWidth || 640;
+        canvas.height = video.videoHeight || 480;
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        
-        // Convert canvas to base64 JPEG
-        // We use lower quality (0.6) for faster transmission
-        const frameData = canvas.toDataURL('image/jpeg', 0.6);
-        
+
+        // Compress heavily to ensure real-time performance over WS
+        const frameData = canvas.toDataURL('image/jpeg', 0.5);
+
         ws.send(JSON.stringify({ frame: frameData }));
     }
 
@@ -248,7 +296,12 @@ document.addEventListener('DOMContentLoaded', () => {
         emptyState.classList.remove('hidden');
         resultsContent.classList.add('hidden');
         loadingIndicator.classList.add('hidden');
-        statusBanner.className = 'status-banner'; // reset classes
+        statusBanner.className = 'status-banner';
+        statusIcon.innerHTML = ICONS.info; // Default icon
+        classificationResult.textContent = 'N/A';
+        dangerReason.textContent = 'Awaiting analysis...';
+        captionText.textContent = 'No caption available.';
+        latencyVal.textContent = '0 ms';
     }
 
     function displayResults(data) {
@@ -257,22 +310,26 @@ document.addEventListener('DOMContentLoaded', () => {
         resultsContent.classList.remove('hidden');
         analyzeBtn.disabled = false;
 
-        // Set Caption
-        captionText.textContent = data.caption;
+        // Populate text
+        captionText.textContent = data.caption || 'No caption returned.';
 
-        // Set Classification UI
-        const isSafe = data.classification.toUpperCase() === 'SAFE';
-        classificationResult.textContent = data.classification.toUpperCase();
-        
+        const isSafe = data.classification && data.classification.toUpperCase() === 'SAFE';
+        classificationResult.textContent = (data.classification || 'UNKNOWN').toUpperCase();
+
+        // Update styling and icons based on classification
         if (isSafe) {
             statusBanner.className = 'status-banner safe';
-            dangerReason.textContent = "Scene appears clear of hazards.";
+            dangerReason.textContent = "Scene appears clear of common hazards.";
+            statusIcon.innerHTML = ICONS.safe;
         } else {
             statusBanner.className = 'status-banner dangerous';
-            dangerReason.textContent = data.danger_reason || "Warning: Potential hazard detected!";
+            dangerReason.textContent = data.danger_reason || "Potential hazard detected!";
+            statusIcon.innerHTML = ICONS.danger;
         }
 
-        // Set Metrics
-        latencyVal.textContent = `${data.latency_ms.toFixed(0)} ms`;
+        // Populate metrics
+        if (data.latency_ms) {
+            latencyVal.textContent = `${data.latency_ms.toFixed(0)} ms`;
+        }
     }
 });
