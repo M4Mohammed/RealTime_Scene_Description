@@ -41,9 +41,8 @@ from .captioner import Captioner
 caption_model = Captioner(model_name="huggingface-api")
 danger_classifier = DangerClassifier()
 
-# Mount the frontend directory to serve static files
+# We will mount the frontend directory to serve static files at the end of the file.
 frontend_dir = os.path.join(os.path.dirname(__file__), "..", "frontend")
-app.mount("/", StaticFiles(directory=frontend_dir, html=True), name="frontend")
 
 
 @app.post("/api/analyze/image")
@@ -260,3 +259,7 @@ async def websocket_endpoint(websocket: WebSocket):
              await websocket.send_json({"error": str(e)})
         except:
              pass
+
+# Mount the frontend directory to serve static files AT THE VERY END
+# so it doesn't intercept /api/... requests (FastAPI evaluates routes in order)
+app.mount("/", StaticFiles(directory=frontend_dir, html=True), name="frontend")
