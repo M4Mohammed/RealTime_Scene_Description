@@ -55,13 +55,7 @@ async def analyze_image(file: UploadFile = File(...)):
         image_bytes = await file.read()
         image = Image.open(BytesIO(image_bytes)).convert("RGB")
         
-        # MOCK PIPELINE FOR NOW
-        caption_result = {
-            "caption": "MOCK: A mock caption of the uploaded image containing a hole in the ground.",
-            "latency_ms": 150.0
-        }
-        
-        # Real pipeline would be:
+        # Use real pipeline
         caption_result = caption_model.generate_caption(image)
         
         caption = caption_result["caption"]
@@ -229,14 +223,15 @@ async def websocket_endpoint(websocket: WebSocket):
             image_bytes = base64.b64decode(frame_data)
             image = Image.open(BytesIO(image_bytes)).convert("RGB")
             
-            # MOCK PIPELINE FOR REAL-TIME
-            caption_result = {
-                "caption": "MOCK: Real-time caption of an open manhole on the street.",
-                "latency_ms": 140.0
-            }
-            
-            # Real pipeline would be:
-            # caption_result = caption_model.generate_caption(image)
+            try:
+                # Use real pipeline for Live Camera
+                caption_result = caption_model.generate_caption(image)
+            except Exception as e:
+                logger.error(f"WebSocket Captioner Error: {e}")
+                caption_result = {
+                    "caption": f"Error communicating with AI Space API: {str(e)}",
+                    "latency_ms": 0.0
+                }
             
             caption = caption_result["caption"]
             classification, reason = danger_classifier.classify(caption)
