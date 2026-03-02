@@ -86,7 +86,7 @@ Since we moved to the Hugging Face API, the backend handles zero AI load itself!
 2. Click **New +** and select **Web Service**.
 3. Connect the `vision-assist-app` repository you created in Step 1.
 4. Set the Language/Runtime to **Python**.
-5. **Start Command**: `uvicorn src.backend.main:app --host 0.0.0.0 --port $PORT`
+5. **Start Command**: `python -m uvicorn src.backend.main:app --host 0.0.0.0 --port $PORT`
 6. Click **Advanced** and add the Variables from Step 4 below!
 
 ---

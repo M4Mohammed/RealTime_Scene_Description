@@ -43,4 +43,4 @@ RUN python -c "from transformers import BlipProcessor, BlipForConditionalGenerat
 WORKDIR /app/src/backend
 
 # Command to run the FastAPI application using Uvicorn
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
