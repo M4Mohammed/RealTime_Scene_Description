@@ -113,11 +113,15 @@ document.addEventListener('DOMContentLoaded', () => {
     tabs.forEach(tab => {
         tab.addEventListener('click', () => {
             tabs.forEach(t => t.classList.remove('active'));
-            tabContents.forEach(c => c.classList.add('hidden'));
+            tabContents.forEach(c => {
+                c.classList.add('hidden');
+                c.classList.remove('active');
+            });
 
             tab.classList.add('active');
             const targetId = tab.getAttribute('data-target');
             document.getElementById(targetId).classList.remove('hidden');
+            document.getElementById(targetId).classList.add('active');
 
             resetResults();
 
