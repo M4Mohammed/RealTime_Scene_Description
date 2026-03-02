@@ -62,18 +62,28 @@ class Captioner:
             import io
             import requests
             
-            # Convert PIL Image to Bytes for HTTP Request
+            import base64
+            
+            # Convert PIL Image to Base64 String for JSON Payload
             buffered = io.BytesIO()
             if image.mode != "RGB":
                 image = image.convert("RGB")
             image.save(buffered, format="JPEG")
-            img_bytes = buffered.getvalue()
+            img_b64 = base64.b64encode(buffered.getvalue()).decode("utf-8")
             
             try:
-                # The old api-inference.huggingface.co is deprecated
+                # Use HF router for latest serverless models
                 api_url = f"https://router.huggingface.co/hf-inference/models/{self.model_name}"
-                headers = {"Authorization": f"Bearer {self.api_key}"}
-                response = requests.post(api_url, headers=headers, data=img_bytes)
+                headers = {
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Content-Type": "application/json"
+                }
+                
+                payload = {
+                    "inputs": img_b64
+                }
+                
+                response = requests.post(api_url, headers=headers, json=payload)
                 
                 if response.status_code == 200:
                     try:
@@ -85,14 +95,19 @@ class Captioner:
                     except Exception as json_err:
                         caption = f"Error parsing JSON success response: {json_err}"
                 else:
-                    error_msg = response.text[:200]  # truncate to avoid huge HTML dumps
+                    error_msg = response.text
+                    if len(error_msg) > 200:
+                        error_msg = error_msg[:200]
                     print(f"Hugging Face API HTTP Error {response.status_code}: {error_msg}")
                     if response.status_code == 401:
                         caption = "Error: Invalid or missing Hugging Face API Key."
+                    elif response.status_code == 404:
+                         caption = f"Error: Model endpoint not found (404) on Hugging Face router. Model: {self.model_name}"
                     elif response.status_code == 503 or "loading" in error_msg.lower():
                         caption = "Error: Model is currently loading (Cold Start). Please wait 20 seconds and try again."
                     else:
                         caption = f"Error generating caption via API HTTP {response.status_code}. (Check console logs)"
+                        
             except Exception as e:
                 import traceback
                 traceback.print_exc()
