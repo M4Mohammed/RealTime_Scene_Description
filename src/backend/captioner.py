@@ -119,8 +119,15 @@ class Captioner:
                 # InferenceClient automatically handles timeouts, retries, and formatting.
                 caption = self.client.image_to_text(img_bytes)
             except Exception as e:
-                print(f"Hugging Face API Request Error: {e}")
-                caption = "Error generating caption with Hugging Face API."
+                error_msg = str(e)
+                print(f"Hugging Face API Request Error: {error_msg}")
+                # Provide a more descriptive error depending on common Hugging Face issues
+                if "401" in error_msg or "Unauthorized" in error_msg:
+                    caption = "Error: Invalid or missing Hugging Face API Key."
+                elif "503" in error_msg or "loading" in error_msg.lower():
+                    caption = "Error: Model is currently loading (Cold Start). Please wait 20 seconds and try again."
+                else:
+                    caption = f"Error generating caption: {error_msg}"
                 
             latency_ms = (time.perf_counter() - start_time) * 1000
             
