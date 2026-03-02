@@ -13,7 +13,7 @@ class Captioner:
         It uses the Hugging Face API if HUGGINGFACE_API_KEY is present,
         otherwise it attempts to load the model locally.
         """
-        self.model_name = "Salesforce/blip-image-captioning-large"
+        self.model_name = "nlpconnect/vit-gpt2-image-captioning"
         self.api_key = os.getenv("HUGGINGFACE_API_KEY")
         self.use_api = bool(self.api_key)
         
@@ -61,7 +61,6 @@ class Captioner:
         if self.use_api:
             import io
             import requests
-            
             import base64
             
             # Convert PIL Image to Base64 String for JSON Payload
@@ -72,12 +71,9 @@ class Captioner:
             img_b64 = base64.b64encode(buffered.getvalue()).decode("utf-8")
             
             try:
-                # Use HF router for latest serverless models
-                api_url = f"https://router.huggingface.co/hf-inference/models/{self.model_name}"
-                headers = {
-                    "Authorization": f"Bearer {self.api_key}",
-                    "Content-Type": "application/json"
-                }
+                # Use custom dedicated HF Space API
+                api_url = "https://a7med-ame3-visionassist-api.hf.space/predict"
+                headers = {"Content-Type": "application/json"}
                 
                 payload = {
                     "inputs": img_b64
@@ -98,22 +94,18 @@ class Captioner:
                     error_msg = response.text
                     if len(error_msg) > 200:
                         error_msg = error_msg[:200]
-                    print(f"Hugging Face API HTTP Error {response.status_code}: {error_msg}")
-                    if response.status_code == 401:
-                        caption = "Error: Invalid or missing Hugging Face API Key."
-                    elif response.status_code == 404:
-                         caption = f"Error: Model endpoint not found (404) on Hugging Face router. Model: {self.model_name}"
-                    elif response.status_code == 503 or "loading" in error_msg.lower():
-                        caption = "Error: Model is currently loading (Cold Start). Please wait 20 seconds and try again."
+                    print(f"Custom HF Space API HTTP Error {response.status_code}: {error_msg}")
+                    if response.status_code == 503 or "loading" in error_msg.lower():
+                        caption = "Error: Custom API Model is currently loading (Cold Start). Please wait 30 seconds and try again."
                     else:
-                        caption = f"Error generating caption via API HTTP {response.status_code}. (Check console logs)"
+                        caption = f"Error generating caption via Custom API HTTP {response.status_code}. (Check logs)"
                         
             except Exception as e:
                 import traceback
                 traceback.print_exc()
                 error_msg = str(e) if str(e) else repr(e)
-                print(f"Hugging Face API Request Exception: {error_msg}")
-                caption = f"Error generating caption via API: {error_msg}"
+                print(f"Custom HF Space API Request Exception: {error_msg}")
+                caption = f"Error generating caption via Custom API: {error_msg}"
         else:
             import torch
             
