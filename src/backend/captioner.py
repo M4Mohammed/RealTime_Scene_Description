@@ -60,6 +60,7 @@ class Captioner:
         
         if self.use_api:
             import io
+            import requests
             
             # Convert PIL Image to Bytes for HTTP Request
             buffered = io.BytesIO()
@@ -69,18 +70,35 @@ class Captioner:
             img_bytes = buffered.getvalue()
             
             try:
-                caption = self.client.image_to_text(img_bytes)
+                # The old api-inference.huggingface.co is deprecated
+                api_url = f"https://router.huggingface.co/hf-inference/models/{self.model_name}"
+                headers = {"Authorization": f"Bearer {self.api_key}"}
+                response = requests.post(api_url, headers=headers, data=img_bytes)
+                
+                if response.status_code == 200:
+                    try:
+                        result = response.json()
+                        if isinstance(result, list) and len(result) > 0 and "generated_text" in result[0]:
+                            caption = result[0]["generated_text"]
+                        else:
+                            caption = f"Error: Unexpected response format: {result}"
+                    except Exception as json_err:
+                        caption = f"Error parsing JSON success response: {json_err}"
+                else:
+                    error_msg = response.text[:200]  # truncate to avoid huge HTML dumps
+                    print(f"Hugging Face API HTTP Error {response.status_code}: {error_msg}")
+                    if response.status_code == 401:
+                        caption = "Error: Invalid or missing Hugging Face API Key."
+                    elif response.status_code == 503 or "loading" in error_msg.lower():
+                        caption = "Error: Model is currently loading (Cold Start). Please wait 20 seconds and try again."
+                    else:
+                        caption = f"Error generating caption via API HTTP {response.status_code}. (Check console logs)"
             except Exception as e:
                 import traceback
                 traceback.print_exc()
                 error_msg = str(e) if str(e) else repr(e)
-                print(f"Hugging Face API Request Error: {error_msg}")
-                if "401" in error_msg or "Unauthorized" in error_msg:
-                    caption = "Error: Invalid or missing Hugging Face API Key."
-                elif "503" in error_msg or "loading" in error_msg.lower():
-                    caption = "Error: Model is currently loading (Cold Start). Please wait 20 seconds and try again."
-                else:
-                    caption = f"Error generating caption via API: {error_msg}"
+                print(f"Hugging Face API Request Exception: {error_msg}")
+                caption = f"Error generating caption via API: {error_msg}"
         else:
             import torch
             
