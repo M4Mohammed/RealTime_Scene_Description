@@ -47,13 +47,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const latencyVal = document.getElementById('latency-val');
     const statusIcon = document.getElementById('status-icon');
 
-    // DOM Elements - Slideshow Player (Video Analysis)
+    // DOM Elements - Video Player
     const slideshowContainer = document.getElementById('slideshow-container');
-    const slideshowFrame = document.getElementById('slideshow-frame');
-    const btnSlideshowPrev = document.getElementById('slideshow-prev');
-    const btnSlideshowNext = document.getElementById('slideshow-next');
-    const btnSlideshowPlayPause = document.getElementById('slideshow-play-pause');
-    const slideshowProgress = document.getElementById('slideshow-progress');
+    const resultVideo = document.getElementById('result-video');
     const loadingText = document.getElementById('loading-text');
 
     // DOM Elements - Toasts
@@ -68,13 +64,6 @@ document.addEventListener('DOMContentLoaded', () => {
     let frameCount = 0;
     let lastFpsTime = Date.now();
     const FRAME_RATE_MS = 1000; // 1 fps
-
-    // Slideshow State Variables
-    let videoResults = [];
-    let currentSlideIndex = 0;
-    let isPlayingSlideshow = false;
-    let slideshowInterval = null;
-    const SLIDESHOW_DELAY = 2500; // 2.5 seconds per frame
 
     // SVG Icons
     const ICONS = {
@@ -287,11 +276,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const data = await response.json();
 
-            if (data.frames && data.frames.length > 0) {
-                videoResults = data.frames;
-                initSlideshow();
+            if (data.video_base64) {
+                // Set the video player source to the synthesized MP4
+                resultVideo.src = `data:video/mp4;base64,${data.video_base64}`;
+                slideshowContainer.classList.remove('hidden');
+
+                // Display summary results
+                displayResults({
+                    caption: `Video Analysis Complete. Processed ${data.unique_keyframes} unique keyframes.`,
+                    classification: "INFO",
+                    danger_reason: "Review the generated summary video above.",
+                    latency_ms: null
+                });
             } else {
-                showToast("No distinct frames found or video processing failed.", "error");
+                showToast("No video generated or processing failed.", "error");
                 resetResults();
             }
         } catch (error) {
@@ -410,7 +408,7 @@ document.addEventListener('DOMContentLoaded', () => {
         resultsContent.classList.add('hidden');
         slideshowContainer.classList.add('hidden');
         loadingIndicator.classList.remove('hidden');
-        stopSlideshow();
+        if (resultVideo) resultVideo.pause();
     }
 
     function resetResults() {
@@ -424,8 +422,7 @@ document.addEventListener('DOMContentLoaded', () => {
         dangerReason.textContent = 'Awaiting analysis...';
         captionText.textContent = 'No caption available.';
         latencyVal.textContent = '0 ms';
-        stopSlideshow();
-        videoResults = [];
+        if (resultVideo) resultVideo.pause();
     }
 
     function displayResults(data) {
@@ -453,74 +450,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // --- Slideshow Logic ---
-    function initSlideshow() {
-        if (videoResults.length === 0) return;
-
-        currentSlideIndex = 0;
-        slideshowContainer.classList.remove('hidden');
-        loadingIndicator.classList.add('hidden');
-
-        updateSlideshowUI();
-        startSlideshow();
-    }
-
-    function updateSlideshowUI() {
-        const frameData = videoResults[currentSlideIndex];
-
-        if (frameData.image_base64) {
-            slideshowFrame.src = 'data:image/jpeg;base64,' + frameData.image_base64;
-        }
-
-        slideshowProgress.textContent = `${currentSlideIndex + 1} / ${videoResults.length}`;
-
-        displayResults({
-            caption: frameData.caption,
-            classification: frameData.classification,
-            danger_reason: frameData.danger_reason,
-            latency_ms: frameData.latency_ms
-        });
-    }
-
-    function nextSlide() {
-        currentSlideIndex = (currentSlideIndex + 1) % videoResults.length;
-        updateSlideshowUI();
-    }
-
-    function prevSlide() {
-        currentSlideIndex = (currentSlideIndex - 1 + videoResults.length) % videoResults.length;
-        updateSlideshowUI();
-    }
-
-    function startSlideshow() {
-        isPlayingSlideshow = true;
-        btnSlideshowPlayPause.textContent = "Pause";
-        if (slideshowInterval) clearInterval(slideshowInterval);
-        slideshowInterval = setInterval(nextSlide, SLIDESHOW_DELAY);
-    }
-
-    function stopSlideshow() {
-        isPlayingSlideshow = false;
-        btnSlideshowPlayPause.textContent = "Play";
-        if (slideshowInterval) clearInterval(slideshowInterval);
-    }
-
-    btnSlideshowNext.addEventListener('click', () => {
-        stopSlideshow();
-        nextSlide();
-    });
-
-    btnSlideshowPrev.addEventListener('click', () => {
-        stopSlideshow();
-        prevSlide();
-    });
-
-    btnSlideshowPlayPause.addEventListener('click', () => {
-        if (isPlayingSlideshow) {
-            stopSlideshow();
-        } else {
-            startSlideshow();
-        }
-    });
+    // (Slideshow logic removed because we now stream a real MP4 back from the server)
 
 });

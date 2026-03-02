@@ -104,85 +104,125 @@ async def analyze_video(file: UploadFile = File(...)):
         if fps == 0 or total_frames == 0:
             raise Exception("Could not read video properties.")
 
-        frames_data = []
-        prev_frame_gray = None
+        # Prepare VideoWriter for the output synthesized video
+        out_fd, out_temp_video_path = tempfile.mkstemp(suffix=".mp4")
         
-        # Extract at most 1 frame per second to avoid overload
+        # Determine output dimensions (standardize to 640x480 for consistency)
+        out_width = 800
+        out_height = 600
+        
+        # Use simple mp4v codec for standard web compatibility
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        out_video = cv2.VideoWriter(out_temp_video_path, fourcc, fps, (out_width, out_height))
+
+        prev_frame_gray = None
+        current_caption = "Analyzing initial scene..."
+        current_status = "UNKNOWN"
+        
+        # Extract at most 1 frame per second to avoid HF API overload
         frame_interval = int(fps) 
         if frame_interval <= 0: frame_interval = 1
         
         current_frame = 0
+        total_processed_unique_frames = 0
         
         while cap.isOpened():
             ret, frame = cap.read()
             if not ret:
                 break
                 
-            if current_frame % frame_interval == 0:
-                # Resize for faster processing and lower bandwidth
-                frame_resized = cv2.resize(frame, (640, 480))
-                gray = cv2.cvtColor(frame_resized, cv2.COLOR_BGR2GRAY)
-                
+            # Resize internal processing frames for perf
+            process_frame = cv2.resize(frame, (640, 480))
+            gray = cv2.cvtColor(process_frame, cv2.COLOR_BGR2GRAY)
+            
+            # Check for unique keyframes every 1 second
+            if current_frame % frame_interval == 0 and total_processed_unique_frames < 20:
                 is_unique = True
                 
                 if prev_frame_gray is not None:
-                    # Calculate Mean Squared Error
                     error = mse(gray, prev_frame_gray)
                     logger.info(f"Frame {current_frame} MSE: {error}")
-                    # If MSE is low, the frames are very similar (redundant)
-                    if error < 1000.0:  # Threshold can be tuned
+                    if error < 1000.0:  # Threshold
                         is_unique = False
                 
                 if is_unique:
-                    # Convert to PIL Image for Captioner
-                    color_frame = cv2.cvtColor(frame_resized, cv2.COLOR_BGR2RGB)
+                    logger.info(f"Generating caption for unique frame {current_frame}...")
+                    color_frame = cv2.cvtColor(process_frame, cv2.COLOR_BGR2RGB)
                     pil_img = Image.fromarray(color_frame)
                     
-                    # Generate Caption
-                    # Try using real pipeline, fallback to mock if it fails 
                     try:
                         caption_result = caption_model.generate_caption(pil_img)
+                        current_caption = caption_result["caption"]
                     except Exception as e:
-                        logger.warning(f"Caption engine failed, using mock: {e}")
-                        caption_result = {
-                            "caption": f"MOCK: Video frame {current_frame} extracted.",
-                            "latency_ms": 100.0
-                        }
+                        logger.warning(f"Caption engine failed: {e}")
+                        current_caption = "Error generating caption."
                         
-                    caption = caption_result["caption"]
-                    classification, reason = danger_classifier.classify(caption)
+                    classification, reason = danger_classifier.classify(current_caption)
+                    current_status = classification.upper()
                     
-                    # Convert PIL back to base64 for frontend
-                    buffered = BytesIO()
-                    pil_img.save(buffered, format="JPEG", quality=75)
-                    img_str = base64.b64encode(buffered.getvalue()).decode()
-                    
-                    frames_data.append({
-                        "frame_index": current_frame,
-                        "time_sec": current_frame / fps,
-                        "caption": caption,
-                        "classification": classification,
-                        "danger_reason": reason,
-                        "latency_ms": caption_result.get("latency_ms", 0),
-                        "image_base64": img_str
-                    })
-                    
+                    total_processed_unique_frames += 1
                     prev_frame_gray = gray
-                    
-                    # Limit max frames to prevent huge payloads/timeouts
-                    if len(frames_data) >= 20: 
-                        logger.info("Reached maximum of 20 unique frames.")
-                        break
             
+            # ---------------------------------------------------------
+            # DRAW OVERLAY ON THE CURRENT FRAME
+            # ---------------------------------------------------------
+            # We resize the display frame to our target 800x600 size
+            display_frame = cv2.resize(frame, (out_width, out_height))
+            
+            # Create a black semi-transparent background bar at the bottom
+            overlay = display_frame.copy()
+            overlay_height = 120
+            cv2.rectangle(overlay, (0, out_height - overlay_height), (out_width, out_height), (0, 0, 0), -1)
+            cv2.addWeighted(overlay, 0.7, display_frame, 0.3, 0, display_frame)
+            
+            # Determine Color for Status Box
+            status_color = (0, 255, 0) if current_status == "SAFE" else (0, 0, 255)
+            if current_status == "UNKNOWN":
+                status_color = (200, 200, 200)
+                
+            # Draw Status Box (Top Right padding)
+            cv2.rectangle(display_frame, (10, out_height - overlay_height + 10), (130, out_height - overlay_height + 40), status_color, -1)
+            cv2.putText(display_frame, current_status, (25, out_height - overlay_height + 32), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+            
+            # Handle Long Captions (Split into 2 lines if needed)
+            max_chars = 60
+            if len(current_caption) > max_chars:
+                words = current_caption.split(' ')
+                line1, line2 = "", ""
+                for word in words:
+                    if len(line1) + len(word) < max_chars:
+                        line1 += word + " "
+                    else:
+                        line2 += word + " "
+                cv2.putText(display_frame, line1.strip(), (150, out_height - overlay_height + 32), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1, cv2.LINE_AA)
+                cv2.putText(display_frame, line2.strip(), (150, out_height - overlay_height + 62), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1, cv2.LINE_AA)
+            else:
+                cv2.putText(display_frame, current_caption, (150, out_height - overlay_height + 32), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1, cv2.LINE_AA)
+
+            # Write the modified frame to the output video
+            out_video.write(display_frame)
             current_frame += 1
+            
+            # Stop if we hit 600 total frames to prevent huge memory buffers/timeouts in free Azure App
+            if current_frame > 600:
+                logger.info("Reached maximum allowed video duration (600 frames).")
+                break
 
         cap.release()
+        out_video.release()
         
-        if not frames_data:
-             raise Exception("No valid frames could be extracted.")
-
-        logger.info(f"Processed video. Extracted {len(frames_data)} unique frames.")
-        return {"frames": frames_data}
+        logger.info(f"Video synthesis complete. Processed {total_processed_unique_frames} unique keyframes.")
+        
+        # Read the generated MP4 file and encode to base64
+        with open(out_temp_video_path, "rb") as video_file:
+            video_bytes = video_file.read()
+            video_b64 = base64.b64encode(video_bytes).decode('ascii')
+            
+        return {
+             "video_base64": video_b64,
+             "total_frames": current_frame,
+             "unique_keyframes": total_processed_unique_frames
+        }
 
     except Exception as e:
         logger.error(f"Error processing video: {str(e)}")
@@ -190,8 +230,14 @@ async def analyze_video(file: UploadFile = File(...)):
         traceback.print_exc()
         return {"error": str(e)}, 500
     finally:
+        # Clean up temporary files
         if temp_video_path and os.path.exists(temp_video_path):
             os.remove(temp_video_path)
+        try:
+             if 'out_temp_video_path' in locals() and os.path.exists(out_temp_video_path):
+                 os.remove(out_temp_video_path)
+        except Exception:
+             pass
 
 
 @app.websocket("/ws/livestream")

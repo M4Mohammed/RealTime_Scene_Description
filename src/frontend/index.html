@@ -207,28 +207,12 @@
 
                 <!-- Video Slideshow Player (Hidden by default) -->
                 <div id="slideshow-container" class="hidden">
-                    <div class="video-container glass-inset" style="margin-bottom: 1rem;">
-                        <img id="slideshow-frame"
-                            style="width: 100%; height: 100%; object-fit: contain; display: block;"
-                            alt="Extracted Frame">
-                    </div>
-
-                    <div class="slideshow-controls"
-                        style="display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.2); padding: 1rem; border-radius: var(--border-radius-sm); margin-bottom: 1.5rem;">
-                        <button id="slideshow-prev" class="btn-icon" aria-label="Previous Frame"><svg
-                                xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2"
-                                stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
-                            </svg></button>
-                        <button id="slideshow-play-pause" class="btn btn-primary"
-                            style="padding: 0.5rem 1rem;">Pause</button>
-                        <button id="slideshow-next" class="btn-icon" aria-label="Next Frame"><svg
-                                xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2"
-                                stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
-                            </svg></button>
-                        <span id="slideshow-progress" class="text-muted" style="margin-left:auto; font-weight:bold;">1 /
-                            1</span>
+                    <div class="video-container glass-inset" style="margin-bottom: 1rem; padding: 0.5rem;">
+                        <video id="result-video" 
+                            style="width: 100%; height: auto; max-height: 400px; border-radius: 8px;"
+                            controls autoplay playsinline>
+                            Your browser does not support the video tag.
+                        </video>
                     </div>
                 </div>
 
