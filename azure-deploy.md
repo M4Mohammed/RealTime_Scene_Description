@@ -99,7 +99,8 @@ Your app needs the AI keys to function.
 
 1. Wait for the Web App deployment to finish, then click **Go to resource**.
 2. On the left menu, under the **Settings** section, click **Environment variables**.
-3. Under the **App settings** tab, click **+ Add** and add these two exact variables one by one:
+3. Under the **App settings** tab, click **+ Add** and add these three exact variables one by one:
+   - Name: `SCM_DO_BUILD_DURING_DEPLOYMENT` | Value: `true` *(Very important to install dependencies!)*
    - Name: `HUGGINGFACE_API_KEY` | Value: *(Paste the Token from Step 2)*
    - Name: `HUGGINGFACE_MODEL_URL` | Value: `https://api-inference.huggingface.co/models/microsoft/git-base-coco`
 4. Click **Apply** at the bottom, then click **Confirm** in the pop-up to restart the server.
