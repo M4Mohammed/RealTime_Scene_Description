@@ -1,0 +1,8 @@
+# Web-app dependencies (no ML libraries)
+fastapi
+uvicorn
+Pillow
+python-multipart
+websockets
+requests
+opencv-python-headless

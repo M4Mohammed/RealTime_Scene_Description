@@ -1,0 +1,29 @@
+# ── GPU Model Server Image (PyTorch + BLIP) ──────────────────────────────
+FROM pytorch/pytorch:2.1.2-cuda12.1-cudnn8-runtime
+
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+WORKDIR /app
+
+COPY requirements.model.txt /app/requirements.txt
+RUN pip install --upgrade pip && pip install --no-cache-dir -r requirements.txt
+
+# Pre-download the model weights at build time so the container starts fast
+ARG MODEL_NAME=Salesforce/blip-image-captioning-base
+RUN python -c "\
+from transformers import BlipProcessor, BlipForConditionalGeneration; \
+BlipProcessor.from_pretrained('${MODEL_NAME}'); \
+BlipForConditionalGeneration.from_pretrained('${MODEL_NAME}')"
+
+# Copy model server code
+COPY ./model_server /app/model_server
+
+WORKDIR /app/model_server
+
+EXPOSE 8080
+
+HEALTHCHECK --interval=15s --timeout=10s --start-period=60s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')" || exit 1
+
+CMD ["python", "-m", "uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8080"]

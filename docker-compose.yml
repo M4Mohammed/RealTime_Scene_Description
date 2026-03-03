@@ -1,0 +1,54 @@
+# ============================================================================
+# VisionAssist — Docker Compose (GCP Compute Engine with GPU)
+# ============================================================================
+# Usage:
+#   docker compose up -d --build
+#   docker compose logs -f
+#   docker compose down
+# ============================================================================
+
+services:
+  # --------------------------------------------------------------------------
+  # Web App — FastAPI backend + static frontend (no GPU needed)
+  # --------------------------------------------------------------------------
+  web-app:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    container_name: visionassist-web
+    ports:
+      - "8000:8000"
+    environment:
+      - MODEL_SERVER_URL=http://model-server:8080
+    depends_on:
+      model-server:
+        condition: service_healthy
+    networks:
+      - visionassist-net
+    restart: unless-stopped
+
+  # --------------------------------------------------------------------------
+  # Model Server — BLIP inference on GPU
+  # --------------------------------------------------------------------------
+  model-server:
+    build:
+      context: .
+      dockerfile: Dockerfile.model
+    container_name: visionassist-model
+    environment:
+      - MODEL_NAME=Salesforce/blip-image-captioning-base
+      - MAX_NEW_TOKENS=50
+    networks:
+      - visionassist-net
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+networks:
+  visionassist-net:
+    driver: bridge

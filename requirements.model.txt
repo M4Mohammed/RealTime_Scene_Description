@@ -1,0 +1,6 @@
+# Model-server dependencies (GPU inference)
+fastapi
+uvicorn
+Pillow
+transformers
+torch

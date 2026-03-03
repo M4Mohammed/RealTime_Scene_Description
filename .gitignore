@@ -1,1 +1,18 @@
+# Environment
 .env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+venv/
+.venv/
+
+# Model cache (can be large)
+.cache/
+*.pt
+*.bin
+
+# IDE
+.vscode/
+.idea/
