@@ -3,4 +3,5 @@ fastapi
 uvicorn
 Pillow
 transformers
-torch
+safetensors
+torch>=2.6.0
