@@ -18,7 +18,7 @@ class SemanticChecker:
     def __init__(self, model_name="sentence-transformers/clip-ViT-B-32"):
         self.model_name = model_name
         self.api_key = os.getenv("HUGGINGFACE_API_KEY")
-        self.api_url = f"https://api-inference.huggingface.co/models/{model_name}"
+        self.api_url = f"https://router.huggingface.co/hf-inference/models/{model_name}"
             
         print(f"Loading SemanticChecker API Client for {model_name}...")
         
