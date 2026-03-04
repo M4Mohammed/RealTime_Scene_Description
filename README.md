@@ -24,6 +24,118 @@ To ensure 100% free uptime and bypass hardware limitations on standard cloud pro
 1.  **AI Inference Node (Hugging Face Spaces):** A dedicated, private Docker Space running `Salesforce/blip-image-captioning-large` locally on a free 16GB RAM instance. It exposes a single FastAPI endpoint that strictly processes `base64` images into text captions.
 2.  **Web & Logic Node (Microsoft Azure):** An Azure App Service that hosts the beautiful Frontend UI and the primary Python Backend. This node receives images/video/livestreams from the user, forwards the frames to the Hugging Face Space API, and performs text-based danger classification on the returned captions.
 
+### System Diagram
+
+```mermaid
+graph TD
+    classDef client fill:#3498db,stroke:#2980b9,stroke-width:2px,color:#fff;
+    classDef azure fill:#2ecc71,stroke:#27ae60,stroke-width:2px,color:#fff;
+    classDef hf fill:#f1c40f,stroke:#f39c12,stroke-width:2px,color:#fff;
+
+    Client((Web Client Browser UI)):::client
+    Azure[Web & Logic Node<br/>Azure App Service]:::azure
+    HFSpace[AI Inference Node<br/>Hugging Face Docker Space]:::hf
+
+    Client <-->|REST / WebSockets| Azure
+    Azure <-->|POST /predict| HFSpace
+    
+    subgraph "Web & Logic Node (FastAPI)"
+        MainAPI(API Routing & WS)
+        DangerCL(Danger Classifier)
+    end
+    
+    subgraph "AI Inference Node"
+        BlipModel[Salesforce/blip-image-captioning-large]
+    end
+
+    Azure --- MainAPI
+    MainAPI --- DangerCL
+    HFSpace --- BlipModel
+```
+
+### Feature Workflows
+
+#### Static Image Analysis
+```mermaid
+sequenceDiagram
+    participant User as Web UI
+    participant Backend as FastAPI (main.py)
+    participant Captioner as captioner.py
+    participant HF as HF Space (app.py)
+    participant Classifier as Danger Classifier
+    
+    User->>Backend: POST /api/analyze/image (FormData)
+    Backend->>Captioner: generate_caption()
+    Captioner->>HF: POST /predict (Base64 Image)
+    HF->>Captioner: JSON [generated_text, latency]
+    Captioner->>Backend: Caption Result
+    Backend->>Classifier: classify(caption)
+    Classifier->>Backend: SAFE/DANGEROUS & reason
+    Backend->>User: JSON Result (caption, classification, latency)
+    User->>User: Update UI Status Banner
+```
+
+#### Video Analysis (Synthesis)
+```mermaid
+sequenceDiagram
+    participant User as Web UI
+    participant Backend as FastAPI (main.py)
+    participant OpenCV as Video Processor
+    participant Captioner as captioner.py
+    participant HF as HF Space (app.py)
+    participant Classifier as Danger Classifier
+    
+    User->>Backend: POST /api/analyze/video (MP4/WebM)
+    Backend->>OpenCV: Read Video (cv2.VideoCapture)
+    
+    loop Per Frame
+        OpenCV->>OpenCV: Extract Frame & Calculate MSE
+        alt Is keyframe & unique (MSE < 1000)?
+            OpenCV->>Captioner: generate_caption()
+            Captioner->>HF: POST /predict
+            HF->>Captioner: Caption text
+            Captioner->>OpenCV: Return Caption
+            OpenCV->>Classifier: classify(caption)
+            Classifier->>OpenCV: SAFE/DANGEROUS & reason
+        end
+        OpenCV->>OpenCV: Draw overlay (Caption, Status Box) on frame
+        OpenCV->>OpenCV: Write to Output Video (cv2.VideoWriter)
+    end
+    
+    OpenCV->>Backend: Synthesized Video MP4 File
+    Backend->>Backend: Encode to Base64
+    Backend->>User: JSON {video_base64, total_frames, unique_keyframes}
+    User->>User: Display Synthesized Base64 MP4 Player
+```
+
+#### Live Camera Stream Analysis
+```mermaid
+sequenceDiagram
+    participant User as Web Camera UI
+    participant Backend as FastAPI (main.py)
+    participant Captioner as captioner.py
+    participant HF as HF Space (app.py)
+    participant Classifier as Danger Classifier
+    
+    User->>Backend: Connect WebSocket (/ws/livestream)
+    Backend->>User: Connection Accepted
+    
+    loop Every 1 Second (1 FPS)
+        User->>User: Capture Canvas Frame
+        User->>Backend: Send WS Msg -> JSON {frame: Base64}
+        Backend->>Captioner: generate_caption()
+        Captioner->>HF: POST /predict
+        HF->>Captioner: Caption Text
+        Captioner->>Backend: Result
+        Backend->>Classifier: classify(caption)
+        Classifier->>Backend: SAFE/DANGEROUS & reason
+        Backend->>User: Send WS Msg -> JSON {caption, classification, latency}
+        User->>User: Update Result Banner & FPS Counter
+    end
+    
+    User->>Backend: Disconnect WebSocket
+```
+
 ## 📁 Project Structure
 
 ```text
