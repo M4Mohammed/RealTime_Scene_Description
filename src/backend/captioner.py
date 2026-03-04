@@ -13,7 +13,7 @@ class Captioner:
         It uses the Hugging Face API if HUGGINGFACE_API_KEY is present,
         otherwise it attempts to load the model locally.
         """
-        self.model_name = "Salesforce/blip-image-captioning-large"
+        self.model_name = "Salesforce/blip-image-captioning-base"
         self.api_key = os.getenv("HUGGINGFACE_API_KEY")
         self.use_api = bool(self.api_key)
         

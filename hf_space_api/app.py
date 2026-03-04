@@ -7,10 +7,10 @@ from pydantic import BaseModel
 from PIL import Image
 from transformers import BlipProcessor, BlipForConditionalGeneration
 
-app = FastAPI(title="VisionAssist BLIP-Large API")
+app = FastAPI(title="VisionAssist BLIP-Base API")
 
 # Global variables for model and processor
-model_name = "Salesforce/blip-image-captioning-large"
+model_name = "Salesforce/blip-image-captioning-base"
 device = "cuda" if torch.cuda.is_available() else "cpu"
 processor = None
 model = None

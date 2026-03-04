@@ -21,7 +21,7 @@ VisionAssist is a real-time web application designed to help visually impaired i
 
 To ensure 100% free uptime and bypass hardware limitations on standard cloud providers, VisionAssist employs a **Dual-Node Architecture**:
 
-1.  **AI Inference Node (Hugging Face Spaces):** A dedicated, private Docker Space running `Salesforce/blip-image-captioning-large` locally on a free 16GB RAM instance. It exposes a single FastAPI endpoint that strictly processes `base64` images into text captions.
+1.  **AI Inference Node (Hugging Face Spaces):** A dedicated, private Docker Space running `Salesforce/blip-image-captioning-base` locally on a free 16GB RAM instance. It exposes a single FastAPI endpoint that strictly processes `base64` images into text captions.
 2.  **Web & Logic Node (Microsoft Azure):** An Azure App Service that hosts the beautiful Frontend UI and the primary Python Backend. This node receives images/video/livestreams from the user, forwards the frames to the Hugging Face Space API, and performs text-based danger classification on the returned captions.
 
 ### System Diagram
@@ -45,7 +45,7 @@ graph TD
     end
     
     subgraph "AI Inference Node"
-        BlipModel[Salesforce/blip-image-captioning-large]
+        BlipModel[Salesforce/blip-image-captioning-base]
     end
 
     Azure --- MainAPI
@@ -141,7 +141,7 @@ sequenceDiagram
 ```text
 📦 Microsoft-Azure-Demo
  ┣ 📂 hf_space_api/            # Dedicated Hugging Face Space Server (AI Inference Node)
- ┃ ┣ 📜 app.py                 # Standalone API loading BLIP-Large locally
+ ┃ ┣ 📜 app.py                 # Standalone API loading BLIP-Base locally
  ┃ ┣ 📜 Dockerfile             # Container configuration for HF Spaces
  ┃ ┗ 📜 requirements.txt       # Dependencies (transformers, torch, etc.)
  ┣ 📂 notebooks/               # Jupyter Notebooks for testing and evaluation
