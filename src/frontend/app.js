@@ -60,6 +60,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // DOM Elements - TTS
     const ttsToggle = document.getElementById('tts-toggle');
+    const ttsWave = document.getElementById('tts-wave');
+
+    // DOM Elements - Perception UI
+    const urgencyBar = document.getElementById('urgency-bar');
+    const dangerOverlay = document.getElementById('danger-overlay');
 
     // State Variables
     let selectedImageFile = null;
@@ -109,35 +114,110 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // ==========================================
+    // Perception Features: Tone System & Semantic Dedup
+    // ==========================================
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+    function playTone(type) {
+        if (!ttsToggle || !ttsToggle.checked) return;
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+
+        const osc = audioCtx.createOscillator();
+        const gainNode = audioCtx.createGain();
+        osc.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+
+        if (type === 'critical') {
+            // Sawtooth warning (880 -> 660 -> 880)
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(880, audioCtx.currentTime);
+            osc.frequency.setValueAtTime(660, audioCtx.currentTime + 0.1);
+            osc.frequency.setValueAtTime(880, audioCtx.currentTime + 0.2);
+            gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.3);
+        } else if (type === 'high') {
+            // High warning
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(880, audioCtx.currentTime);
+            gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.15);
+        } else if (type === 'medium') {
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(440, audioCtx.currentTime);
+            gainNode.gain.setValueAtTime(0.05, audioCtx.currentTime);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.1);
+        }
+    }
+
+    function calculateSemanticOverlap(text1, text2) {
+        if (!text1 || !text2) return 0;
+
+        // Remove punctuation and lowercase
+        const clean1 = text1.toLowerCase().replace(/[^\w\s]/g, '').split(/\s+/);
+        const clean2 = text2.toLowerCase().replace(/[^\w\s]/g, '').split(/\s+/);
+
+        // Remove common stop words for better semantic comparison
+        const stopWords = new Set(['a', 'an', 'the', 'is', 'are', 'in', 'on', 'at', 'with', 'of', 'and']);
+        const words1 = new Set(clean1.filter(w => !stopWords.has(w) && w.length > 0));
+        const words2 = new Set(clean2.filter(w => !stopWords.has(w) && w.length > 0));
+
+        if (words1.size === 0 && words2.size === 0) return 100;
+        if (words1.size === 0 || words2.size === 0) return 0;
+
+        let intersectionCount = 0;
+        for (let word of words1) {
+            if (words2.has(word)) intersectionCount++;
+        }
+
+        // Percentage based on the smaller set to ensure subsets trigger dedup
+        const minLength = Math.min(words1.size, words2.size);
+        return (intersectionCount / minLength) * 100;
+    }
+
+    // ==========================================
     // Smart Text-to-Speech (TTS)
     // ==========================================
-    function speakText(text, isDanger = false) {
+    function speakText(text, urgencyLevel = 'safe') {
         if (!ttsToggle || !ttsToggle.checked) return;
         if (!('speechSynthesis' in window)) return;
 
         // Stop currently speaking audio immediately if danger pops up or resolving new caption
         window.speechSynthesis.cancel();
 
+        // Play tone before speech to prime the user's attention
+        playTone(urgencyLevel);
+
         isSpeaking = true;
+        if (ttsWave) ttsWave.classList.add('speaking');
+
         const msg = new SpeechSynthesisUtterance();
         msg.text = text;
         msg.volume = 1.0;
 
-        // Make warnings sound more urgent
-        if (isDanger) {
-            msg.rate = 1.1; // Slightly faster
-            msg.pitch = 1.2; // Higher pitch
-            // Optional context prefix
+        // Adjust Voice parameters based on urgency
+        if (urgencyLevel === 'critical') {
+            msg.rate = 1.15; // Faster
+            msg.pitch = 1.3; // Higher pitch
+            msg.text = `Critical Warning: ${text}`;
+        } else if (urgencyLevel === 'high') {
+            msg.rate = 1.05;
+            msg.pitch = 1.1;
             msg.text = `Warning: ${text}`;
         } else {
             msg.rate = 1.0;
             msg.pitch = 1.0;
         }
 
-        msg.onend = () => { isSpeaking = false; };
-        msg.onerror = () => { isSpeaking = false; };
+        msg.onend = () => { isSpeaking = false; if (ttsWave) ttsWave.classList.remove('speaking'); };
+        msg.onerror = () => { isSpeaking = false; if (ttsWave) ttsWave.classList.remove('speaking'); };
 
-        window.speechSynthesis.speak(msg);
+        // Add tiny delay to allow tone to play first, then speak
+        setTimeout(() => {
+            window.speechSynthesis.speak(msg);
+        }, 300);
 
         lastSpokenCaption = text;
         lastSpokenTime = Date.now();
@@ -413,26 +493,45 @@ document.addEventListener('DOMContentLoaded', () => {
                 displayResults(data);
                 updateFPS();
 
-                // --- Smart Debouncing TTS Logic ---
+                // --- Smart Debouncing & Semantic Dedup TTS Logic ---
                 if (data.caption && !data.caption.startsWith("Error")) {
                     const isDanger = (data.classification && data.classification.toUpperCase() === 'DANGEROUS');
+                    const reasonStr = (data.danger_reason || "").toLowerCase();
                     const now = Date.now();
-                    const isSameAsLast = (data.caption === lastSpokenCaption);
                     const timeSinceLastSpeech = now - lastSpokenTime;
+
+                    // Determine Severity
+                    let severity = 'safe';
+                    if (isDanger) {
+                        if (reasonStr.includes('fast') || reasonStr.includes('weapon') || reasonStr.includes('fire')) {
+                            severity = 'critical';
+                        } else {
+                            severity = 'high';
+                        }
+                    } else if (data.caption.includes('moving') || data.caption.includes('approaching')) {
+                        severity = 'medium'; // Provide a soft blip for motion
+                    }
+
+                    // Semantic Dedup: Check overlap rather than exact string match
+                    const overlapPercent = calculateSemanticOverlap(data.caption, lastSpokenCaption);
+                    const isSemanticallySimilar = (overlapPercent > 55);
 
                     // Always speak immediately if danger is detected
                     if (isDanger) {
-                        // Play a beep sound optionally here
                         // We don't debounce Dangers. If it's dangerous, yell immediately.
-                        // But if it's the EXACT same danger rapidly flickering, only repeat every 4 seconds.
-                        if (!isSameAsLast || timeSinceLastSpeech > 4000) {
-                            speakText(`${data.danger_reason}. ${data.caption}`, true);
+                        // But if it's the highly similar danger rapidly flickering, only repeat every 4 seconds.
+                        if (!isSemanticallySimilar || timeSinceLastSpeech > 4000) {
+                            speakText(`${data.danger_reason}. ${data.caption}`, severity);
+                        } else {
+                            console.log(`⚡ Cached Danger: ${overlapPercent.toFixed(1)}% overlap.`);
                         }
                     }
-                    // If safe, only speak if it's a NEW scene, or if the timeout has passed
+                    // If safe, only speak if it's a NEW scene semantically, or if the long timeout has passed
                     else {
-                        if (!isSameAsLast || timeSinceLastSpeech > TTS_DEBOUNCE_MS) {
-                            speakText(data.caption, false);
+                        if (!isSemanticallySimilar || timeSinceLastSpeech > TTS_DEBOUNCE_MS) {
+                            speakText(data.caption, severity);
+                        } else {
+                            console.log(`⚡ Cached Safe: ${overlapPercent.toFixed(1)}% overlap.`);
                         }
                     }
                 }
@@ -505,6 +604,11 @@ document.addEventListener('DOMContentLoaded', () => {
         if (captionHeaderTitle) captionHeaderTitle.textContent = 'Generated Caption';
         if (videoActionsContainer) videoActionsContainer.classList.add('hidden');
         if (resultVideo) resultVideo.pause();
+
+        // Reset UI perception features
+        if (urgencyBar) urgencyBar.className = 'urgency-bar low';
+        if (dangerOverlay) dangerOverlay.classList.remove('active');
+        if (ttsWave) ttsWave.classList.remove('speaking');
     }
 
     function displayResults(data) {
@@ -512,7 +616,19 @@ document.addEventListener('DOMContentLoaded', () => {
         emptyState.classList.add('hidden');
         resultsContent.classList.remove('hidden');
 
-        captionText.textContent = data.caption || 'No caption returned.';
+        // Apply slide-up animation to the caption
+        if (captionText.textContent !== data.caption) {
+            captionText.classList.add('caption-fade-out');
+            setTimeout(() => {
+                captionText.textContent = data.caption || 'No caption returned.';
+                captionText.classList.remove('caption-fade-out');
+                captionText.classList.remove('caption-slide');
+                void captionText.offsetWidth; // Trigger reflow to restart animation
+                captionText.classList.add('caption-slide');
+            }, 200); // Wait for fade-out
+        } else {
+            captionText.textContent = data.caption || 'No caption returned.';
+        }
 
         const isSafe = data.classification && data.classification.toUpperCase() === 'SAFE';
         classificationResult.textContent = (data.classification || 'UNKNOWN').toUpperCase();
@@ -521,10 +637,21 @@ document.addEventListener('DOMContentLoaded', () => {
             statusBanner.className = 'status-banner safe';
             dangerReason.textContent = "Scene appears clear of common hazards.";
             statusIcon.innerHTML = ICONS.safe;
+            if (urgencyBar) urgencyBar.className = 'urgency-bar low';
+            if (dangerOverlay) dangerOverlay.classList.remove('active');
         } else {
             statusBanner.className = 'status-banner dangerous';
             dangerReason.textContent = data.danger_reason || "Potential hazard detected!";
             statusIcon.innerHTML = ICONS.danger;
+
+            // Perception UI triggers based on theoretical danger severity
+            const reasonLower = (data.danger_reason || "").toLowerCase();
+            if (reasonLower.includes('fast') || reasonLower.includes('weapon') || reasonLower.includes('fire')) {
+                if (urgencyBar) urgencyBar.className = 'urgency-bar critical';
+            } else {
+                if (urgencyBar) urgencyBar.className = 'urgency-bar high';
+            }
+            if (dangerOverlay) dangerOverlay.classList.add('active');
         }
 
         if (data.latency_ms) {

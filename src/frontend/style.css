@@ -1083,3 +1083,132 @@ body.dark-theme {
         transform: translateX(50px);
     }
 }
+
+/* =========================================
+   Interactive UI Perception Features 
+   ========================================= */
+
+/* 1. Urgency Bar */
+.urgency-bar {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 6px;
+    height: 100%;
+    background-color: transparent;
+    transition: background-color 0.3s ease, box-shadow 0.3s ease;
+    z-index: 20;
+    border-top-left-radius: inherit;
+    border-bottom-left-radius: inherit;
+}
+
+.urgency-bar.critical {
+    background-color: var(--danger-color);
+    box-shadow: 0 0 15px var(--danger-color);
+    animation: urgencyPulse 1s infinite alternate;
+}
+
+.urgency-bar.high {
+    background-color: var(--warning-color);
+    box-shadow: 0 0 10px var(--warning-color);
+}
+
+.urgency-bar.low {
+    background-color: transparent;
+    box-shadow: none;
+}
+
+@keyframes urgencyPulse {
+    from { opacity: 0.6; box-shadow: 0 0 10px var(--danger-color); }
+    to { opacity: 1; box-shadow: 0 0 25px var(--danger-color); }
+}
+
+/* 2. Danger Pulse (Vignette) */
+.danger-overlay {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    box-shadow: inset 0 0 0 0 rgba(229, 57, 53, 0);
+    transition: box-shadow 0.4s ease;
+    z-index: 15;
+    border-radius: inherit;
+}
+
+.danger-overlay.active {
+    animation: dangerVignettePulse 1.5s infinite;
+}
+
+@keyframes dangerVignettePulse {
+    0% { box-shadow: inset 0 0 0 0 rgba(229, 57, 53, 0); }
+    50% { box-shadow: inset 0 0 50px 10px rgba(229, 57, 53, 0.4); }
+    100% { box-shadow: inset 0 0 0 0 rgba(229, 57, 53, 0); }
+}
+
+/* 3. Caption Slide-up */
+.caption-container {
+    overflow: hidden;
+    position: relative;
+    padding-top: 5px; /* space for tts-wave if needed */
+}
+
+.caption-text {
+    /* Existing style */
+    transition: opacity 0.2s ease;
+}
+
+.caption-slide {
+    animation: captionSlideUp 0.35s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
+
+.caption-fade-out {
+    opacity: 0 !important;
+}
+
+@keyframes captionSlideUp {
+    from {
+        opacity: 0;
+        transform: translateY(15px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* 4. TTS Wave Indicator */
+.tts-wave-container {
+    display: flex;
+    align-items: flex-end;
+    gap: 3px;
+    height: 24px;
+    padding-left: 10px;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.tts-wave-container.speaking {
+    opacity: 1;
+}
+
+.tts-wave-container .bar {
+    width: 4px;
+    height: 4px;
+    background-color: var(--primary-light);
+    border-radius: 2px;
+}
+
+.tts-wave-container.speaking .bar {
+    animation: waveBarBounce 1s infinite alternate ease-in-out;
+}
+
+/* Stagger bar animations */
+.tts-wave-container .bar:nth-child(1) { animation-delay: 0.1s; }
+.tts-wave-container .bar:nth-child(2) { animation-delay: 0.3s; }
+.tts-wave-container .bar:nth-child(3) { animation-delay: 0.0s; }
+.tts-wave-container .bar:nth-child(4) { animation-delay: 0.4s; }
+.tts-wave-container .bar:nth-child(5) { animation-delay: 0.2s; }
+
+@keyframes waveBarBounce {
+    0% { height: 4px; }
+    100% { height: 20px; }
+}
