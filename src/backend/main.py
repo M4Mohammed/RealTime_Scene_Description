@@ -46,7 +46,6 @@ motion_tracker = MotionTracker()
 # We will mount the frontend directory to serve static files at the end of the file.
 frontend_dir = os.path.join(os.path.dirname(__file__), "..", "frontend")
 
-
 @app.post("/api/analyze/image")
 async def analyze_image(file: UploadFile = File(...)):
     """
@@ -78,7 +77,6 @@ async def analyze_image(file: UploadFile = File(...)):
         return {"error": str(e)}, 500
 
 # Deprecated pixel-based mse check removed in favor of semantic checking
-
 @app.post("/api/analyze/video")
 async def analyze_video(file: UploadFile = File(...)):
     """
@@ -275,7 +273,6 @@ async def analyze_video(file: UploadFile = File(...)):
                  os.remove(out_temp_video_path)
         except Exception:
              pass
-
 
 @app.websocket("/ws/livestream")
 async def websocket_endpoint(websocket: WebSocket):
