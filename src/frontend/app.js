@@ -65,6 +65,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // DOM Elements - Perception UI
     const urgencyBar = document.getElementById('urgency-bar');
     const dangerOverlay = document.getElementById('danger-overlay');
+    const cameraPlaceholder = document.getElementById('camera-placeholder');
 
     // State Variables
     let selectedImageFile = null;
@@ -443,6 +444,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             startCameraBtn.classList.add('hidden');
             stopCameraBtn.classList.remove('hidden');
+            if (cameraPlaceholder) cameraPlaceholder.classList.add('hidden');
             resetResults();
 
             connectWebSocket();
@@ -471,6 +473,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         startCameraBtn.classList.remove('hidden');
         stopCameraBtn.classList.add('hidden');
+        if (cameraPlaceholder) cameraPlaceholder.classList.remove('hidden');
         fpsCounter.textContent = '0 FPS';
     }
 
