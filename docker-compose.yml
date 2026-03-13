@@ -18,6 +18,9 @@ services:
     container_name: visionassist-web
     ports:
       - "8000:8000"
+    env_file:
+      - path: .env
+        required: false
     environment:
       - MODEL_SERVER_URL=http://model-server:8080
     depends_on:
@@ -26,6 +29,11 @@ services:
     networks:
       - visionassist-net
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   # --------------------------------------------------------------------------
   # Model Server — BLIP inference on GPU
@@ -35,12 +43,20 @@ services:
       context: .
       dockerfile: Dockerfile.model
     container_name: visionassist-model
+    env_file:
+      - path: .env
+        required: false
     environment:
       - MODEL_NAME=Salesforce/blip-image-captioning-base
       - MAX_NEW_TOKENS=50
     networks:
       - visionassist-net
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     deploy:
       resources:
         reservations:

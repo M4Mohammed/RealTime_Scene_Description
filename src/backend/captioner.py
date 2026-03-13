@@ -17,49 +17,10 @@ class Captioner:
     """
 
     def __init__(self):
-        """
-        Initializes the Blip-Base captioning model.
-        It uses the Hugging Face API if HUGGINGFACE_API_KEY is present,
-        otherwise it attempts to load the model locally.
-        """
-        self.model_name = "Salesforce/blip-image-captioning-base"
-        self.api_key = os.getenv("HUGGINGFACE_API_KEY")
-        self.use_api = bool(self.api_key)
-        
-        print(f"Initializing {self.model_name}...")
-        
-        self.processor = None
-        self.model = None
-        self.client = None
-        
-        self._load_model()
-        
-    def _load_model(self):
-        """Loads the Blip-Base model either via API client or local transformers."""
-        if self.use_api:
-            from huggingface_hub import InferenceClient
-            print("Configuring Hugging Face API via huggingface_hub for Blip-Base...")
-            self.client = InferenceClient(model=self.model_name, token=self.api_key)
-            print("Hugging Face API configured successfully.")
-        else:
-            print("No HUGGINGFACE_API_KEY found. Attempting to load Blip-Base locally...")
-            try:
-                import torch
-                from transformers import BlipProcessor, BlipForConditionalGeneration
-                
-                self.device = "cuda" if torch.cuda.is_available() else "cpu"
-                print(f"Loading local model on {self.device}...")
-                
-                self.processor = BlipProcessor.from_pretrained(self.model_name)
-                dtype = torch.float16 if self.device == "cuda" else torch.float32
-                self.model = BlipForConditionalGeneration.from_pretrained(
-                    self.model_name, 
-                    torch_dtype=dtype
-                ).to(self.device)
-                print("Local BLIP model loaded successfully.")
-            except ImportError as e:
-                print(f"Error loading local model. Please install torch and transformers. {e}")
-                raise
+        """Read model-server URL from environment and build predict endpoint."""
+        base_url = os.getenv("MODEL_SERVER_URL", "http://model-server:8080")
+        self.predict_endpoint = f"{base_url.rstrip('/')}/predict"
+        print(f"Captioner → model-server at {self.predict_endpoint}")
 
     def generate_caption(self, image: Image.Image) -> Dict[str, Any]:
         """
