@@ -1,5 +1,9 @@
 # Environment
 .env
+/__pycache__
+/venv
+*/__pycache__
+/.pytest_cache
 
 # Python
 __pycache__/

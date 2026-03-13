@@ -35,15 +35,16 @@ from .classifier import DangerClassifier
 # Note: For production, we'd initialize the model once globally.
 # For this skeleton, we will mock the captioner just to test the API structure,
 # and initialize the real one inside the actual benchmark/evaluation scripts later.
-# 
 from .captioner import Captioner
+from .motion_tracker import MotionTracker
+
 # Global initialized model - enforcing Blip-Base
 caption_model = Captioner()
 danger_classifier = DangerClassifier()
+motion_tracker = MotionTracker()
 
 # We will mount the frontend directory to serve static files at the end of the file.
 frontend_dir = os.path.join(os.path.dirname(__file__), "..", "frontend")
-
 
 @app.post("/api/analyze/image")
 async def analyze_image(file: UploadFile = File(...)):
@@ -75,13 +76,7 @@ async def analyze_image(file: UploadFile = File(...)):
         logger.error(f"Error processing image: {str(e)}")
         return {"error": str(e)}, 500
 
-def mse(imageA, imageB):
-    # the 'Mean Squared Error' between the two images is the
-    # sum of the squared difference between the two images;
-    err = np.sum((imageA.astype("float") - imageB.astype("float")) ** 2)
-    err /= float(imageA.shape[0] * imageA.shape[1])
-    return err
-
+# Deprecated pixel-based mse check removed in favor of semantic checking
 @app.post("/api/analyze/video")
 async def analyze_video(file: UploadFile = File(...)):
     """
@@ -111,17 +106,19 @@ async def analyze_video(file: UploadFile = File(...)):
         out_width = 800
         out_height = 600
         
-        # Use simple mp4v codec for standard web compatibility
-        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        # Use Web-compatible H.264 codec (avc1) instead of mp4v for HTML5 browser playback
+        fourcc = cv2.VideoWriter_fourcc(*'avc1')
         out_video = cv2.VideoWriter(out_temp_video_path, fourcc, fps, (out_width, out_height))
 
-        prev_frame_gray = None
+        prev_gray = None
         current_caption = "Analyzing initial scene..."
         current_status = "UNKNOWN"
+        motion_status = "Static"
+        frame_captions = []
         
-        # Extract at most 1 frame per second to avoid HF API overload
-        frame_interval = int(fps) 
-        if frame_interval <= 0: frame_interval = 1
+        # We can extract frames more frequently now because LK Optical Flow is 1ms
+        # E.g. 5 frames per second checks
+        frame_interval = max(int(fps // 5), 1) 
         
         current_frame = 0
         total_processed_unique_frames = 0
@@ -131,26 +128,42 @@ async def analyze_video(file: UploadFile = File(...)):
             if not ret:
                 break
                 
-            # Resize internal processing frames for perf
+            # Resize internal processing frames
             process_frame = cv2.resize(frame, (640, 480))
-            gray = cv2.cvtColor(process_frame, cv2.COLOR_BGR2GRAY)
             
-            # Check for unique keyframes every 1 second
+            # Convert to Grayscale for Optical Flow
+            curr_gray = cv2.cvtColor(process_frame, cv2.COLOR_BGR2GRAY)
+            
+            # Check for significant motion periodically
             if current_frame % frame_interval == 0 and total_processed_unique_frames < 20:
-                is_unique = True
+                logger.info(f"Checking Frame {current_frame} Motion...")
                 
-                if prev_frame_gray is not None:
-                    error = mse(gray, prev_frame_gray)
-                    logger.info(f"Frame {current_frame} MSE: {error}")
-                    if error < 1000.0:  # Threshold
-                        is_unique = False
+                magnitude = 0.0
+                direction = (0.0, 0.0)
+                is_significant_movement = False
                 
-                if is_unique:
-                    logger.info(f"Generating caption for unique frame {current_frame}...")
-                    color_frame = cv2.cvtColor(process_frame, cv2.COLOR_BGR2RGB)
-                    pil_img = Image.fromarray(color_frame)
+                # Check optical flow
+                if prev_gray is not None:
+                    try:
+                        magnitude, direction = motion_tracker.optical_flow_motion(prev_gray, curr_gray)
+                        motion_status = motion_tracker.interpret_direction(direction)
+                        
+                        if magnitude > 3.0:
+                             is_significant_movement = True
+                             logger.info(f"Frame {current_frame}: Significant Movement (Mag: {magnitude:.2f}, Dir: {motion_status}). Generating Caption.")
+                        else:
+                             # Use small log for debugging without spamming
+                             pass
+                    except Exception as e:
+                        logger.warning(f"Optical flow tracker failed: {e}")
+                else:
+                    is_significant_movement = True # Always caption the first frame
+                
+                if is_significant_movement:
                     
                     try:
+                        color_frame = cv2.cvtColor(process_frame, cv2.COLOR_BGR2RGB)
+                        pil_img = Image.fromarray(color_frame)
                         caption_result = caption_model.generate_caption(pil_img)
                         current_caption = caption_result["caption"]
                     except Exception as e:
@@ -160,8 +173,16 @@ async def analyze_video(file: UploadFile = File(...)):
                     classification, reason = danger_classifier.classify(current_caption)
                     current_status = classification.upper()
                     
+                    frame_captions.append({
+                        "timestamp_sec": round(current_frame / fps, 2),
+                        "caption": current_caption,
+                        "classification": current_status,
+                        "reason": reason
+                    })
+                    
                     total_processed_unique_frames += 1
-                    prev_frame_gray = gray
+                
+                prev_gray = curr_gray.copy()
             
             # ---------------------------------------------------------
             # DRAW OVERLAY ON THE CURRENT FRAME
@@ -183,6 +204,10 @@ async def analyze_video(file: UploadFile = File(...)):
             # Draw Status Box (Top Right padding)
             cv2.rectangle(display_frame, (10, out_height - overlay_height + 10), (130, out_height - overlay_height + 40), status_color, -1)
             cv2.putText(display_frame, current_status, (25, out_height - overlay_height + 32), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+            
+            # Draw Motion Context
+            cv2.putText(display_frame, f"Motion: {motion_status}", (10, out_height - overlay_height + 62), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1)
+            cv2.putText(display_frame, f"Mag: {magnitude:.1f}", (10, out_height - overlay_height + 82), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (200, 200, 200), 1)
             
             # Handle Long Captions (Split into 2 lines if needed)
             max_chars = 60
@@ -218,10 +243,20 @@ async def analyze_video(file: UploadFile = File(...)):
             video_bytes = video_file.read()
             video_b64 = base64.b64encode(video_bytes).decode('ascii')
             
+        # Generate primitive summary
+        unique_captions = [fc["caption"] for fc in frame_captions if fc["caption"] and not fc["caption"].startswith("Error")]
+        filtered_captions = []
+        for c in unique_captions:
+            if not filtered_captions or filtered_captions[-1] != c:
+                filtered_captions.append(c)
+        summary = " ".join(filtered_captions) if filtered_captions else "No distinct events detected in the video."
+            
         return {
              "video_base64": video_b64,
              "total_frames": current_frame,
-             "unique_keyframes": total_processed_unique_frames
+             "unique_keyframes": total_processed_unique_frames,
+             "summary": summary,
+             "frame_captions": frame_captions
         }
 
     except Exception as e:
@@ -238,7 +273,6 @@ async def analyze_video(file: UploadFile = File(...)):
                  os.remove(out_temp_video_path)
         except Exception:
              pass
-
 
 @app.websocket("/ws/livestream")
 async def websocket_endpoint(websocket: WebSocket):
